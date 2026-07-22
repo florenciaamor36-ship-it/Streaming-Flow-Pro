@@ -1,0 +1,6 @@
+{
+  "name": "Stream Flow Pro",
+  "description": "Gestor de ventas de perfiles de cuentas de streaming con recordatorios y notificaciones de vencimiento.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
