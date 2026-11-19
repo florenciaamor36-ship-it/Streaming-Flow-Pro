@@ -6,16 +6,46 @@ import com.example.data.local.ProfileSaleEntity
 import com.example.data.local.StreamingAccountEntity
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
+
+/** UI-safe sync state: never contains Firebase exception text, credentials, or user data. */
+data class FirebaseSyncStatus(
+    val isSyncing: Boolean = false,
+    val hasError: Boolean = false
+)
+
+enum class FirebaseSyncEvent { STARTED, SUCCEEDED, FAILED, CANCELLED, DISMISSED }
+
+fun reduceFirebaseSyncStatus(
+    current: FirebaseSyncStatus,
+    event: FirebaseSyncEvent
+): FirebaseSyncStatus = when (event) {
+    FirebaseSyncEvent.STARTED -> current.copy(isSyncing = true)
+    // Keep failures sticky until explicitly dismissed: another unrelated successful write must
+    // not conceal a previous mutation that may still be missing from the cloud.
+    FirebaseSyncEvent.SUCCEEDED -> current.copy(isSyncing = false)
+    FirebaseSyncEvent.FAILED -> current.copy(isSyncing = false, hasError = true)
+    FirebaseSyncEvent.CANCELLED -> current.copy(isSyncing = false)
+    FirebaseSyncEvent.DISMISSED -> FirebaseSyncStatus()
+}
 
 class FirebaseSyncManager {
     private val tag = "FirebaseSyncManager"
+    private val syncMutex = Mutex()
+    private val _status = MutableStateFlow(FirebaseSyncStatus())
+    val status: StateFlow<FirebaseSyncStatus> = _status.asStateFlow()
 
     private val auth: FirebaseAuth? by lazy {
         try {
             FirebaseAuth.getInstance()
-        } catch (e: Exception) {
-            Log.w(tag, "Firebase Auth not available or missing configuration: ${e.message}")
+        } catch (_: Exception) {
+            Log.w(tag, "Firebase Auth is unavailable")
             null
         }
     }
@@ -23,112 +53,86 @@ class FirebaseSyncManager {
     private val firestore: FirebaseFirestore? by lazy {
         try {
             FirebaseFirestore.getInstance()
-        } catch (e: Exception) {
-            Log.w(tag, "Firebase Firestore not available or missing configuration: ${e.message}")
+        } catch (_: Exception) {
+            Log.w(tag, "Firebase Firestore is unavailable")
             null
         }
     }
 
-    fun isFirebaseAvailable(): Boolean {
-        return auth != null && firestore != null
+    fun dismissError() {
+        _status.value = reduceFirebaseSyncStatus(_status.value, FirebaseSyncEvent.DISMISSED)
     }
 
-    private fun firestoreForVerifiedUser(userId: String): FirebaseFirestore? {
-        // Never sync guest/local IDs or a caller-supplied UID different from Firebase Auth.
-        if (!canSyncToFirebaseUser(auth?.currentUser?.uid, userId)) return null
-        return firestore
-    }
+    private suspend fun sync(userId: String, operation: suspend (FirebaseFirestore) -> Unit) {
+        // Guest/local-only records are intentionally not synced and should not show an error.
+        if (userId.startsWith("guest_")) return
 
-    // --- FIRESTORE USER PARTITION OPERATIONS ---
-
-    suspend fun saveAccountToFirestore(account: StreamingAccountEntity) {
-        val db = firestoreForVerifiedUser(account.userId) ?: return
-        try {
-            db.collection("users")
-                .document(account.userId)
-                .collection("accounts")
-                .document(account.id)
-                .set(account)
-                .await()
-            Log.d(tag, "Account saved to Firestore")
-        } catch (e: Exception) {
-            Log.e(tag, "Error saving account to Firestore")
+        syncMutex.withLock {
+            _status.value = reduceFirebaseSyncStatus(_status.value, FirebaseSyncEvent.STARTED)
+            val db = firestore
+            // No shared web/Android document contract or matching rules have been verified.
+            // Keep every remote mutation fail-closed until reviewed integration is available.
+            if (db == null || !canWriteSharedFirestore(
+                    BuildConfig.FIRESTORE_SYNC_ENABLED,
+                    auth?.currentUser?.uid,
+                    userId
+                )
+            ) {
+                _status.value = reduceFirebaseSyncStatus(_status.value, FirebaseSyncEvent.FAILED)
+                return
+            }
+            try {
+                operation(db)
+                _status.value = reduceFirebaseSyncStatus(_status.value, FirebaseSyncEvent.SUCCEEDED)
+            } catch (e: CancellationException) {
+                _status.value = reduceFirebaseSyncStatus(_status.value, FirebaseSyncEvent.CANCELLED)
+                throw e
+            } catch (e: Exception) {
+                // Do not put exception details in UI/logs: Firebase errors can contain project data.
+                Log.e(tag, "Firestore sync operation failed")
+                _status.value = reduceFirebaseSyncStatus(_status.value, FirebaseSyncEvent.FAILED)
+            }
         }
     }
 
-    suspend fun deleteAccountFromFirestore(userId: String, accountId: String) {
-        val db = firestoreForVerifiedUser(userId) ?: return
-        try {
-            db.collection("users")
-                .document(userId)
-                .collection("accounts")
-                .document(accountId)
-                .delete()
-                .await()
-        } catch (e: Exception) {
-            Log.e(tag, "Error deleting account from Firestore")
-        }
+    suspend fun saveAccountToFirestore(account: StreamingAccountEntity) = sync(account.userId) { db ->
+        db.collection("users").document(account.userId)
+            .collection("accounts").document(account.id).set(account).await()
     }
 
-    suspend fun saveSaleToFirestore(sale: ProfileSaleEntity) {
-        val db = firestoreForVerifiedUser(sale.userId) ?: return
-        try {
-            db.collection("users")
-                .document(sale.userId)
-                .collection("sales")
-                .document(sale.id)
-                .set(sale)
-                .await()
-            Log.d(tag, "Sale saved to Firestore")
-        } catch (e: Exception) {
-            Log.e(tag, "Error saving sale to Firestore")
-        }
+    suspend fun deleteAccountFromFirestore(userId: String, accountId: String) = sync(userId) { db ->
+        db.collection("users").document(userId)
+            .collection("accounts").document(accountId).delete().await()
     }
 
-    suspend fun deleteSaleFromFirestore(userId: String, saleId: String) {
-        val db = firestoreForVerifiedUser(userId) ?: return
-        try {
-            db.collection("users")
-                .document(userId)
-                .collection("sales")
-                .document(saleId)
-                .delete()
-                .await()
-        } catch (e: Exception) {
-            Log.e(tag, "Error deleting sale from Firestore")
-        }
+    suspend fun saveSaleToFirestore(sale: ProfileSaleEntity) = sync(sale.userId) { db ->
+        db.collection("users").document(sale.userId)
+            .collection("sales").document(sale.id).set(sale).await()
     }
 
-    suspend fun saveClientToFirestore(client: ClientEntity) {
-        val db = firestoreForVerifiedUser(client.userId) ?: return
-        try {
-            db.collection("users")
-                .document(client.userId)
-                .collection("clients")
-                .document(client.id)
-                .set(client)
-                .await()
-            Log.d(tag, "Client saved to Firestore")
-        } catch (e: Exception) {
-            Log.e(tag, "Error saving client to Firestore")
-        }
+    suspend fun deleteSaleFromFirestore(userId: String, saleId: String) = sync(userId) { db ->
+        db.collection("users").document(userId)
+            .collection("sales").document(saleId).delete().await()
     }
 
-    suspend fun deleteClientFromFirestore(userId: String, clientId: String) {
-        val db = firestoreForVerifiedUser(userId) ?: return
-        try {
-            db.collection("users")
-                .document(userId)
-                .collection("clients")
-                .document(clientId)
-                .delete()
-                .await()
-        } catch (e: Exception) {
-            Log.e(tag, "Error deleting client from Firestore")
-        }
+    suspend fun saveClientToFirestore(client: ClientEntity) = sync(client.userId) { db ->
+        db.collection("users").document(client.userId)
+            .collection("clients").document(client.id).set(client).await()
+    }
+
+    suspend fun deleteClientFromFirestore(userId: String, clientId: String) = sync(userId) { db ->
+        db.collection("users").document(userId)
+            .collection("clients").document(clientId).delete().await()
     }
 }
 
 /** Pure ownership guard, also covered by JVM tests. */
 internal fun canSyncToFirebaseUser(authenticatedUid: String?, requestedUserId: String): Boolean =
     !authenticatedUid.isNullOrBlank() && authenticatedUid == requestedUserId
+
+/** Remote mutations require explicit reviewed enablement as well as exact owner UID. */
+internal fun canWriteSharedFirestore(
+    syncEnabled: Boolean,
+    authenticatedUid: String?,
+    requestedUserId: String
+): Boolean = syncEnabled && canSyncToFirebaseUser(authenticatedUid, requestedUserId)

@@ -21,6 +21,8 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    // Fail closed until the web/Android schema and matching owner-only rules are verified together.
+    buildConfigField("boolean", "FIRESTORE_SYNC_ENABLED", "false")
   }
 
   signingConfigs {
