@@ -98,7 +98,7 @@ class FirebaseSyncManager {
 
     suspend fun saveAccountToFirestore(account: StreamingAccountEntity) = sync(account.userId) { db ->
         db.collection("users").document(account.userId)
-            .collection("accounts").document(account.id).set(account).await()
+            .collection("accounts").document(account.id).set(account.toSharedFirestoreDocument()).await()
     }
 
     suspend fun deleteAccountFromFirestore(userId: String, accountId: String) = sync(userId) { db ->
@@ -108,12 +108,36 @@ class FirebaseSyncManager {
 
     suspend fun saveSaleToFirestore(sale: ProfileSaleEntity) = sync(sale.userId) { db ->
         db.collection("users").document(sale.userId)
-            .collection("sales").document(sale.id).set(sale).await()
+            .collection("sales").document(sale.id).set(sale.toSharedFirestoreDocument()).await()
     }
 
     suspend fun deleteSaleFromFirestore(userId: String, saleId: String) = sync(userId) { db ->
         db.collection("users").document(userId)
             .collection("sales").document(saleId).delete().await()
+    }
+
+
+    /** Read only owner-scoped V1 docs. Caller must merge local-only credentials before Room upsert. */
+    suspend fun fetchSharedDocuments(userId: String): Pair<List<Pair<String, Map<String, Any?>>>, List<Pair<String, Map<String, Any?>>>>? {
+        if (userId.startsWith("guest_")) return null
+        val db = firestore ?: return null
+        if (!canWriteSharedFirestore(BuildConfig.FIRESTORE_SYNC_ENABLED, auth?.currentUser?.uid, userId)) return null
+        return try {
+            val root = db.collection("users").document(userId)
+            val accountDocs = root.collection("accounts").get().await().documents.map { doc ->
+                doc.id to (doc.data ?: emptyMap())
+            }
+            val saleDocs = root.collection("sales").get().await().documents.map { doc ->
+                doc.id to (doc.data ?: emptyMap())
+            }
+            accountDocs to saleDocs
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            Log.e(tag, "Firestore sync operation failed")
+            _status.value = reduceFirebaseSyncStatus(_status.value, FirebaseSyncEvent.FAILED)
+            null
+        }
     }
 
     suspend fun saveClientToFirestore(client: ClientEntity) = sync(client.userId) { db ->

@@ -12,7 +12,7 @@ This note is a safety boundary, not a claim that Android and web are compatible.
 
 ## Current behavior in this branch
 
-All Android Firestore mutations are behind `BuildConfig.FIRESTORE_SYNC_ENABLED`, which is hard-coded `false`. That fail-closed gate is tested and causes sync attempts to be reported as failed/not synced rather than silently pretending that local Room changes reached the cloud. This branch does not add a way to turn it on through secrets, Gradle properties, or Firebase configuration. It does not change Firestore rules or project/app configuration. Room schema, migration behavior and existing local records are untouched.
+Android now has allowlisted account/sale read/write projections at the shared candidate paths and an owner-gated fetch-to-Room path. These use the same candidate field names as web, keep account email/password and PINs local, and are covered by synthetic JVM mapper round-trip tests. The Android Firestore gate `BuildConfig.FIRESTORE_SYNC_ENABLED` remains hard-coded `false`. That fail-closed gate is tested and causes sync attempts to be reported as failed/not synced rather than silently pretending that local Room changes reached the cloud. This branch does not add a way to turn it on through secrets, Gradle properties, or Firebase configuration. It does not change Firestore rules or project/app configuration. Room schema, migration behavior and existing local records are untouched.
 
 ## Required contract before enabling sync
 
@@ -28,8 +28,16 @@ A safe first integration test uses the Firestore emulator or a separate disposab
 
 ## Field-level audit follow-up (2026-11-19)
 
-A shared candidate contract and field comparison now lives in the web repo branch's `FIELD_LEVEL_CONTRACT.md`; it records that the client/customer fields can be mapped, but account and sale schemas differ in names, timestamps, relationships and contain credentials/PINs. Android now has an allowlisted client DTO mapping (`userId`, `name`, `phone`, optional `email`/`notes`, UTC ISO `createdAt`) and JVM tests. Account/sale writes remain raw legacy entities behind the hard-coded-false `FIRESTORE_SYNC_ENABLED` gate and must not be enabled. The web branch contains a Firestore Emulator Suite rule test using only synthetic users/data. It exercises candidate `/users/{uid}/...` rules, not production rules; production `/usuarios` and `/tokens_usados` rules/data remain untouched. See web branch `FIELD_LEVEL_CONTRACT.md` for execution steps and explicit limitations.
+A shared candidate contract and field comparison now lives in the web repo branch's `FIELD_LEVEL_CONTRACT.md`; it records that the client/customer fields can be mapped, but account and sale schemas differ in names, timestamps, relationships and contain credentials/PINs. Android now has an allowlisted client DTO mapping (`userId`, `name`, `phone`, optional `email`/`notes`, UTC ISO `createdAt`) and JVM tests. Account/sale writes now use allowlisted DTO projections and reads map those DTOs back into local Room entities while preserving existing local-only credentials. Android JVM mapper round-trip tests use synthetic data. The hard-coded-false gate remains off; no live Firestore integration is claimed. The web branch contains a Firestore Emulator Suite rule test using only synthetic users/data. It exercises candidate `/users/{uid}/...` rules, not production rules; production `/usuarios` and `/tokens_usados` rules/data remain untouched. See web branch `FIELD_LEVEL_CONTRACT.md` for execution steps and explicit limitations.
 
 ## Build fix note (2026-11-19)
 
 The audit CI run at commit `c9366873d9be78d0d5e558a67c9eb156be86811f` failed during Kotlin compilation because `FirebaseSyncManager.kt` referenced the generated `BuildConfig` without importing its namespace-qualified class. The Android Gradle namespace is `com.example` while the installable application ID is `com.aistudio.controlstreaming.sales`; the fix imports `com.example.BuildConfig`. This changes no Firebase configuration, package ID, Firestore path, or sync enablement.
+
+
+## Candidate account/sale mappings added (2026-11-19)
+
+- Account web `platform`, `purchaseDate`, `renewalDate`, `totalProfiles`, and owner fields map to Android `platformName`, epoch-millis dates, `maxProfiles`, and `userId`. `providerName`, `cost`, and notes are retained. Account email/password, PINs, supplier phone, and individual profile status are excluded. Shared profile slots are synthesized for the web UI; web derives sold state from the sales relation.
+- Sale `type`, `startDate`, `endDate`, `status`, `paymentStatus`, customer/platform/financial fields map to Android enums and epoch millis. Account password/email and profile PIN stay local-only. Android emits safe candidate docs; incoming docs preserve pre-existing local-only fields on update.
+- Missing data not in the candidate contract is not reconstructed: supplier phone, payment method and protected credentials are blank/default on newly imported records. Product UX and ID collision/conflict/deletion reconciliation still need a dedicated review.
+- Current rules file is an emulator-only fixture. The web repo contains a separate additive-only proposal; it must be merged against a fresh copy of actual rules and fully regression-tested before any owner deployment. No live rule/data/auth configuration was modified.

@@ -189,6 +189,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             userSession.collect { session ->
                 if (session != null) {
+                    streamingRepository.syncFromFirestore(session.userId)
                     com.example.util.LicenseManager.syncCloudLicense(getApplication(), session.userId)
                     refreshLicenseStatus()
                 }

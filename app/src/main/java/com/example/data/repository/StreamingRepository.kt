@@ -17,6 +17,35 @@ class StreamingRepository(
     private val saleDao = db.profileSaleDao()
     private val clientDao = db.clientDao()
 
+
+    /** Pull allowlisted shared records without overwriting credentials held in local Room. */
+    suspend fun syncFromFirestore(userId: String) {
+        val docs = firebaseSync.fetchSharedDocuments(userId) ?: return
+        for ((id, data) in docs.first) {
+            if (data["userId"] != userId) continue
+            val remote = com.example.data.remote.sharedDocumentToAccount(id, data)
+            val local = accountDao.getAccountById(id, userId)
+            accountDao.insertAccount(remote.copy(
+                accountEmail = local?.accountEmail ?: "",
+                accountPassword = local?.accountPassword ?: "",
+                supplierPhone = local?.supplierPhone ?: ""
+            ))
+        }
+        for ((id, data) in docs.second) {
+            if (data["userId"] != userId) continue
+            val remote = com.example.data.remote.sharedDocumentToSale(id, data)
+            val local = saleDao.getSaleById(id, userId)
+            saleDao.insertSale(remote.copy(
+                accountEmail = local?.accountEmail ?: "",
+                accountPassword = local?.accountPassword ?: "",
+                profilePin = local?.profilePin ?: "",
+                supplierName = local?.supplierName ?: "",
+                supplierPhone = local?.supplierPhone ?: "",
+                reminderSent = local?.reminderSent ?: false
+            ))
+        }
+    }
+
     // --- STREAMING ACCOUNTS ---
     fun getAccountsForUser(userId: String): Flow<List<StreamingAccountEntity>> {
         if (userId.isEmpty()) return emptyFlow()
