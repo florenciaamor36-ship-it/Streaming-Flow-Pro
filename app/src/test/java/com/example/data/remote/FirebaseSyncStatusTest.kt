@@ -13,11 +13,14 @@ class FirebaseSyncStatusTest {
     }
 
     @Test
-    fun successfulSyncClearsPreviousFailure() {
+    fun unrelatedSuccessDoesNotHideAnEarlierFailure() {
         val failed = reduceFirebaseSyncStatus(FirebaseSyncStatus(), FirebaseSyncEvent.FAILED)
         val started = reduceFirebaseSyncStatus(failed, FirebaseSyncEvent.STARTED)
         assertEquals(FirebaseSyncStatus(isSyncing = true, hasError = true), started)
-        assertEquals(FirebaseSyncStatus(), reduceFirebaseSyncStatus(started, FirebaseSyncEvent.SUCCEEDED))
+        assertEquals(
+            FirebaseSyncStatus(isSyncing = false, hasError = true),
+            reduceFirebaseSyncStatus(started, FirebaseSyncEvent.SUCCEEDED)
+        )
     }
 
     @Test

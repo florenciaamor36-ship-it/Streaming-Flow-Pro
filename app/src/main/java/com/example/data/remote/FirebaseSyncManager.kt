@@ -27,8 +27,10 @@ fun reduceFirebaseSyncStatus(
     event: FirebaseSyncEvent
 ): FirebaseSyncStatus = when (event) {
     FirebaseSyncEvent.STARTED -> current.copy(isSyncing = true)
-    FirebaseSyncEvent.SUCCEEDED -> FirebaseSyncStatus()
-    FirebaseSyncEvent.FAILED -> FirebaseSyncStatus(isSyncing = false, hasError = true)
+    // Keep failures sticky until explicitly dismissed: another unrelated successful write must
+    // not conceal a previous mutation that may still be missing from the cloud.
+    FirebaseSyncEvent.SUCCEEDED -> current.copy(isSyncing = false)
+    FirebaseSyncEvent.FAILED -> current.copy(isSyncing = false, hasError = true)
     FirebaseSyncEvent.CANCELLED -> current.copy(isSyncing = false)
     FirebaseSyncEvent.DISMISSED -> FirebaseSyncStatus()
 }
@@ -64,14 +66,14 @@ class FirebaseSyncManager {
     private suspend fun sync(userId: String, operation: suspend (FirebaseFirestore) -> Unit) {
         // Guest/local-only records are intentionally not synced and should not show an error.
         if (userId.startsWith("guest_")) return
-        val db = firestore
-        if (db == null || !canSyncToFirebaseUser(auth?.currentUser?.uid, userId)) {
-            _status.value = reduceFirebaseSyncStatus(_status.value, FirebaseSyncEvent.FAILED)
-            return
-        }
 
         syncMutex.withLock {
             _status.value = reduceFirebaseSyncStatus(_status.value, FirebaseSyncEvent.STARTED)
+            val db = firestore
+            if (db == null || !canSyncToFirebaseUser(auth?.currentUser?.uid, userId)) {
+                _status.value = reduceFirebaseSyncStatus(_status.value, FirebaseSyncEvent.FAILED)
+                return
+            }
             try {
                 operation(db)
                 _status.value = reduceFirebaseSyncStatus(_status.value, FirebaseSyncEvent.SUCCEEDED)
