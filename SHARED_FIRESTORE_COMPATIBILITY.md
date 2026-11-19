@@ -25,3 +25,7 @@ After a reviewed contract is established, implement an explicit adapter for that
 When an owner chooses to register Android later, the exact current Android `applicationId` is `com.aistudio.controlstreaming.sales` (defined in `app/build.gradle.kts`). Register that package in Firebase project `stream-flow-pro`, download its generated config privately into `app/google-services.json` (the file is ignored by git), and confirm the generated Firebase project ID before use. This registration is not performed by this branch.
 
 A safe first integration test uses the Firestore emulator or a separate disposable Firebase project with synthetic fixtures only: two test users; read/write their own fixtures; assert each cannot read/write the other's data; test Android/web round-trip with agreed fields; test retries, duplicate writes, conflicts and deletion semantics; verify the production project is not selected; discard the test project. No real customer/account passwords or production documents should be used.
+
+## Build fix note (2026-11-19)
+
+The audit CI run at commit `c9366873d9be78d0d5e558a67c9eb156be86811f` failed during Kotlin compilation because `FirebaseSyncManager.kt` referenced the generated `BuildConfig` without importing its namespace-qualified class. The Android Gradle namespace is `com.example` while the installable application ID is `com.aistudio.controlstreaming.sales`; the fix imports `com.example.BuildConfig`. This changes no Firebase configuration, package ID, Firestore path, or sync enablement.
