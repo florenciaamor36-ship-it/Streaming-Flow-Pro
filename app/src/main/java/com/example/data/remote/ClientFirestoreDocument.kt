@@ -31,7 +31,6 @@ internal fun StreamingAccountEntity.toSharedFirestoreDocument(): Map<String, Any
     put("providerName", supplierName)
     put("cost", cost)
     put("totalProfiles", maxProfiles)
-    put("isFullAccount", maxProfiles <= 1)
     put("purchaseDate", Date(purchaseDate).toUtcIsoString().take(10))
     put("renewalDate", Date(expirationDate).toUtcIsoString().take(10))
     if (notes.isNotBlank()) put("notes", notes)
@@ -59,7 +58,6 @@ internal fun ProfileSaleEntity.toSharedFirestoreDocument(): Map<String, Any> = b
     put("type", if (saleType.equals("FULL_ACCOUNT", true)) "full_account" else "profile")
     put("accountId", accountId)
     put("profileName", profileName)
-    put("customerId", "phone:$clientPhone")
     put("customerName", clientName)
     put("customerPhone", clientPhone)
     put("platform", platformName)
@@ -73,8 +71,11 @@ internal fun ProfileSaleEntity.toSharedFirestoreDocument(): Map<String, Any> = b
         "RENEWED" -> "renewed"
         else -> "active"
     })
-    put("paymentStatus", if (paymentStatus.equals("PAID", true)) "paid" else "pending")
-    put("paymentMethod", "")
+    put("paymentStatus", when (paymentStatus.uppercase(Locale.US)) {
+        "PAID" -> "paid"
+        "PARTIAL" -> "partial"
+        else -> "pending"
+    })
     if (notes.isNotBlank()) put("notes", notes)
 }
 
@@ -94,7 +95,11 @@ internal fun sharedDocumentToSale(id: String, data: Map<String, Any?>): ProfileS
     costPrice = (data["costPrice"] as? Number)?.toDouble() ?: 0.0,
     saleDate = (data["startDate"] as? String).toUtcEpochMillis(),
     expirationDate = (data["endDate"] as? String).toUtcEpochMillis(),
-    paymentStatus = if ((data["paymentStatus"] as? String).equals("paid", true)) "PAID" else "PENDING",
+    paymentStatus = when ((data["paymentStatus"] as? String)?.lowercase(Locale.US)) {
+        "paid" -> "PAID"
+        "partial" -> "PARTIAL"
+        else -> "PENDING"
+    },
     renewalStatus = when ((data["status"] as? String)?.lowercase(Locale.US)) {
         "cancelled" -> "CANCELLED"
         "renewed" -> "RENEWED"

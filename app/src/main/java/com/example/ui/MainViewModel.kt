@@ -101,7 +101,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 SalesFilter.ALL -> true
                 SalesFilter.EXPIRING_SOON -> status == ExpirationStatus.EXPIRING_SOON || status == ExpirationStatus.EXPIRING_TODAY
                 SalesFilter.EXPIRED -> status == ExpirationStatus.EXPIRED
-                SalesFilter.PENDING_PAYMENT -> sale.paymentStatus == "PENDING"
+                SalesFilter.PENDING_PAYMENT -> sale.paymentStatus == "PENDING" || sale.paymentStatus == "PARTIAL"
                 SalesFilter.ACTIVE -> status == ExpirationStatus.ACTIVE
             }
 

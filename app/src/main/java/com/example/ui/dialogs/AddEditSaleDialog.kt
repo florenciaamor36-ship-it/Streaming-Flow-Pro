@@ -278,6 +278,11 @@ fun AddEditSaleDialog(
                         onClick = { paymentStatus = "PENDING" },
                         label = { Text("PENDIENTE") }
                     )
+                    FilterChip(
+                        selected = paymentStatus == "PARTIAL",
+                        onClick = { paymentStatus = "PARTIAL" },
+                        label = { Text("PARCIAL") }
+                    )
                 }
 
                 // Internal Supplier Details

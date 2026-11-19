@@ -52,13 +52,13 @@ class AccountSaleFirestoreDocumentTest {
             profileName = "Screen A", profilePin = "not-for-sync", clientName = "Fixture Customer",
             clientPhone = "0000000000", salePrice = 20.0, costPrice = 5.0,
             saleDate = utcMillis("2026-11-19"), expirationDate = utcMillis("2026-12-19"),
-            paymentStatus = "PAID", renewalStatus = "ACTIVE", saleType = "PROFILE", notes = "synthetic"
+            paymentStatus = "PARTIAL", renewalStatus = "ACTIVE", saleType = "PROFILE", notes = "synthetic"
         )
         val shared = sale.toSharedFirestoreDocument()
         assertEquals("profile", shared["type"])
         assertEquals("2026-11-19", shared["startDate"])
         assertEquals("2026-12-19", shared["endDate"])
-        assertEquals("paid", shared["paymentStatus"])
+        assertEquals("partial", shared["paymentStatus"])
         assertEquals(15.0, shared["profit"])
         assertFalse(shared.keys.any { it.contains("password", true) || it.contains("email", true) || it.contains("pin", true) })
 
@@ -75,5 +75,6 @@ class AccountSaleFirestoreDocumentTest {
         assertEquals("", restored.accountEmail)
         assertEquals("", restored.accountPassword)
         assertEquals("", restored.profilePin)
+        assertEquals("PARTIAL", restored.paymentStatus)
     }
 }

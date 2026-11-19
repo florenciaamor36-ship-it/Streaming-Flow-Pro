@@ -7,6 +7,7 @@ import com.example.data.local.ProfileSaleEntity
 import com.example.data.local.StreamingAccountEntity
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -98,7 +99,7 @@ class FirebaseSyncManager {
 
     suspend fun saveAccountToFirestore(account: StreamingAccountEntity) = sync(account.userId) { db ->
         db.collection("users").document(account.userId)
-            .collection("accounts").document(account.id).set(account.toSharedFirestoreDocument()).await()
+            .collection("accounts").document(account.id).set(account.toSharedFirestoreDocument(), SetOptions.merge()).await()
     }
 
     suspend fun deleteAccountFromFirestore(userId: String, accountId: String) = sync(userId) { db ->
@@ -108,7 +109,7 @@ class FirebaseSyncManager {
 
     suspend fun saveSaleToFirestore(sale: ProfileSaleEntity) = sync(sale.userId) { db ->
         db.collection("users").document(sale.userId)
-            .collection("sales").document(sale.id).set(sale.toSharedFirestoreDocument()).await()
+            .collection("sales").document(sale.id).set(sale.toSharedFirestoreDocument(), SetOptions.merge()).await()
     }
 
     suspend fun deleteSaleFromFirestore(userId: String, saleId: String) = sync(userId) { db ->
@@ -142,7 +143,7 @@ class FirebaseSyncManager {
 
     suspend fun saveClientToFirestore(client: ClientEntity) = sync(client.userId) { db ->
         db.collection("users").document(client.userId)
-            .collection("clients").document(client.id).set(client.toSharedFirestoreDocument()).await()
+            .collection("clients").document(client.id).set(client.toSharedFirestoreDocument(), SetOptions.merge()).await()
     }
 
     suspend fun deleteClientFromFirestore(userId: String, clientId: String) = sync(userId) { db ->

@@ -87,7 +87,11 @@ fun PaymentStatusChip(
     modifier: Modifier = Modifier
 ) {
     val isPaid = paymentStatus.equals("PAID", ignoreCase = true)
-    val label = if (isPaid) "PAGADO" else "PENDIENTE"
+    val label = when (paymentStatus.uppercase()) {
+        "PAID" -> "PAGADO"
+        "PARTIAL" -> "PARCIAL"
+        else -> "PENDIENTE"
+    }
     val color = if (isPaid) BrandSecondary else BrandTertiary
 
     Box(
