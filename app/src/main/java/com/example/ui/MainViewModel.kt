@@ -41,6 +41,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val streamingRepository = StreamingRepository(database)
 
     val userSession: StateFlow<UserSession?> = authRepository.userSession
+    val syncStatus = streamingRepository.syncStatus
+
+    fun dismissSyncError() = streamingRepository.dismissSyncError()
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()

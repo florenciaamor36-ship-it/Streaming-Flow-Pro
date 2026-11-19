@@ -77,7 +77,38 @@ fun MainAppContent(viewModel: MainViewModel) {
         }
     }
 
+    val syncStatus by viewModel.syncStatus.collectAsState()
+
     Scaffold(
+        topBar = {
+            if (syncStatus.isSyncing || syncStatus.hasError) {
+                Surface(
+                    color = if (syncStatus.hasError) MaterialTheme.colorScheme.errorContainer
+                    else MaterialTheme.colorScheme.secondaryContainer
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Text(
+                                text = if (syncStatus.isSyncing) "Sincronizando cambios con la nube…"
+                                else "La última operación no llegó a la nube. Los datos locales siguen disponibles, pero el cambio puede no estar sincronizado.",
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (syncStatus.hasError) MaterialTheme.colorScheme.onErrorContainer
+                                else MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            if (syncStatus.hasError && !syncStatus.isSyncing) {
+                                IconButton(onClick = viewModel::dismissSyncError) {
+                                    Icon(Icons.Default.Close, contentDescription = "Cerrar aviso de sincronización")
+                                }
+                            }
+                        }
+                        if (syncStatus.isSyncing) {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                }
+            }
+        },
         bottomBar = {
             NavigationBar(
                 containerColor = MaterialTheme.colorScheme.surface,

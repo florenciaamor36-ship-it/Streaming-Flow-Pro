@@ -6,6 +6,8 @@ import com.example.data.local.ProfileSaleEntity
 import com.example.data.local.StreamingAccountEntity
 import com.example.data.remote.FirebaseSyncManager
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
+import com.example.data.remote.FirebaseSyncStatus
 import kotlinx.coroutines.flow.emptyFlow
 import java.util.UUID
 
@@ -16,6 +18,10 @@ class StreamingRepository(
     private val accountDao = db.streamingAccountDao()
     private val saleDao = db.profileSaleDao()
     private val clientDao = db.clientDao()
+
+    val syncStatus: StateFlow<FirebaseSyncStatus> = firebaseSync.status
+
+    fun dismissSyncError() = firebaseSync.dismissError()
 
     // --- STREAMING ACCOUNTS ---
     fun getAccountsForUser(userId: String): Flow<List<StreamingAccountEntity>> {
