@@ -16,10 +16,30 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
           cache-disabled: true
       - name: Run local unit tests only (no APK, release, or upload)
         run: gradle test
+
+      - name: Report failed test identifiers (no messages or test data)
+        if: failure()
+        run: |
+          python3 - <<'PYTEST'
+          import glob, os, xml.etree.ElementTree as ET
+          failed = []
+          for path in glob.glob('**/build/test-results/**/*.xml', recursive=True):
+              try:
+                  root = ET.parse(path).getroot()
+              except (ET.ParseError, OSError):
+                  continue
+              for case in root.iter('testcase'):
+                  if case.find('failure') is not None or case.find('error') is not None:
+                      failed.append(f"{case.get('classname', 'unknown')}.{case.get('name', 'unknown')}")
+          if failed:
+              print('::error title=Failing unit test identifiers::' + '; '.join(sorted(set(failed))))
+          else:
+              print('::error title=Unit test failure::No JUnit XML failures found; inspect Gradle task output.')
+          PYTEST
