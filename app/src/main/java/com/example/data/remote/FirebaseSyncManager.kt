@@ -1,5 +1,6 @@
 package com.example.data.remote
 
+import com.example.BuildConfig
 import android.util.Log
 import com.example.data.local.ClientEntity
 import com.example.data.local.ProfileSaleEntity
