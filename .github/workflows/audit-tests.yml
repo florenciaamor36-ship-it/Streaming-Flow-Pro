@@ -22,24 +22,34 @@ jobs:
           gradle-version: '9.3.1'
           cache-disabled: true
       - name: Run local unit tests only (no APK, release, or upload)
-        run: gradle test
-
-      - name: Report failed test identifiers (no messages or test data)
-        if: failure()
+        shell: bash
         run: |
-          python3 - <<'PYTEST'
-          import glob, os, xml.etree.ElementTree as ET
-          failed = []
-          for path in glob.glob('**/build/test-results/**/*.xml', recursive=True):
-              try:
-                  root = ET.parse(path).getroot()
-              except (ET.ParseError, OSError):
-                  continue
-              for case in root.iter('testcase'):
-                  if case.find('failure') is not None or case.find('error') is not None:
-                      failed.append(f"{case.get('classname', 'unknown')}.{case.get('name', 'unknown')}")
-          if failed:
-              print('::error title=Failing unit test identifiers::' + '; '.join(sorted(set(failed))))
+          set +e
+          gradle test --console=plain > "$RUNNER_TEMP/gradle-test.log" 2>&1
+          result=$?
+          if [ "$result" -ne 0 ]; then
+            python3 - "$RUNNER_TEMP/gradle-test.log" <<'PYTEST'
+          import re, sys
+          failure = re.compile(r"^.* > .* FAILED$")
+          task = re.compile(r"^> Task .* FAILED$")
+          count = re.compile(r"^\d+ tests? completed, \d+ failed$")
+          sdk = re.compile(r"Android SDK \d+ requires Java \d+ \(have Java \d+\)")
+          exception = re.compile(r"(?:[A-Za-z_$][\w$]*\.)*[A-Za-z_$][\w$]*(?:Exception|Error)(?: at [\w.$]+:\d+)?")
+          output = []
+          for raw in open(sys.argv[1], encoding="utf-8", errors="replace"):
+              line = raw.strip()
+              if failure.fullmatch(line) or task.fullmatch(line) or count.fullmatch(line) or sdk.search(line):
+                  output.append(line)
+              elif "Exception" in line or "Error" in line:
+                  match = exception.search(line)
+                  if match:
+                      # Emit only exception type and source frame, never an exception message.
+                      output.append(match.group(0))
+          if output:
+              for line in dict.fromkeys(output):
+                  print("::error title=Gradle test diagnostic::" + line)
           else:
-              print('::error title=Unit test failure::No JUnit XML failures found; inspect Gradle task output.')
+              print("::error title=Gradle test failure::Gradle test task failed; no safe diagnostic summary was found.")
           PYTEST
+          fi
+          exit "$result"
