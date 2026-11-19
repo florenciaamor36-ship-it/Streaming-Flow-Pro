@@ -224,7 +224,7 @@ fun AddEditAccountDialog(
                             val expiration = existingAccount?.expirationDate ?: DateFormatter.addDaysToCurrentTime(days)
 
                             val accountEntity = StreamingAccountEntity(
-                                id = existingAccount?.id ?: ("acc_" + UUID.randomUUID().toString().take(8)),
+                                id = existingAccount?.id ?: ("acc_" + UUID.randomUUID().toString()),
                                 userId = existingAccount?.userId ?: "",
                                 platformName = finalPlatformName,
                                 accountEmail = accountEmail,

@@ -1,0 +1,11 @@
+# Data safety audit notes
+
+This audit does not connect to or read any production Firebase/Firestore account, change remote data, or alter the Room database schema/version.
+
+- Login/registration must be backed by a Firebase Auth user whose UID matches the active Firebase Auth UID. A failed, missing, or unconfirmed Firebase operation is not converted into an authenticated local session.
+- Guest access is explicit and uses a separate `guest_` local-only partition. Logout deactivates the guest session but retains its partition ID/data.
+- The prior automatic Room destructive-migration fallback is removed. Room remains at schema version 2 because this repository has no exported Room schema history and no production database is available for backup/restore or migration verification. Any unsupported future schema upgrade should fail closed rather than erase the database. Do not bump the schema until a versioned migration, exported schema, and a verified backup/restore plan are prepared and tested against a copy of the actual prior schema.
+- Room tables use user-scoped reads/deletes, but their primary keys are global IDs. New UI rows now use full UUIDs, and sale-created clients use UUIDs while deduplicating within the owner by phone. Existing rows are not rewritten. Existing legacy fixed/sample IDs may still collide across users; do not attempt a repair/import without an owner-preserving backup and migration.
+- Firestore security rules are not present in this repository and cannot be audited here. They must enforce `request.auth.uid == userId` for every collection/document operation. Client-side checks are not a substitute for server rules.
+- There is no durable offline mutation queue, explicit conflict policy, or user-visible sync status/error pipeline. Firestore sync currently catches errors; this audit does not claim reliable offline synchronization. A durable queue/conflict solution requires schema design, migration, and tests before use.
+- Local database/session storage is not encrypted, and streaming credentials are stored as plaintext fields. No migration/encryption or backup-policy change is made here because that would require careful key management and data restoration validation.

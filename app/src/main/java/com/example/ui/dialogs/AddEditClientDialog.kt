@@ -105,7 +105,7 @@ fun AddEditClientDialog(
                                 return@Button
                             }
                             val client = ClientEntity(
-                                id = "client_" + UUID.randomUUID().toString().take(8),
+                                id = "client_" + UUID.randomUUID().toString(),
                                 userId = "",
                                 name = name,
                                 phone = phone,

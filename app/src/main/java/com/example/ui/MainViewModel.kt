@@ -58,7 +58,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val accounts: StateFlow<List<StreamingAccountEntity>> = userSession
         .flatMapLatest { session ->
             if (session != null) {
-                streamingRepository.populateSampleDataIfEmpty(session.userId)
                 streamingRepository.getAccountsForUser(session.userId)
             } else {
                 flowOf(emptyList())

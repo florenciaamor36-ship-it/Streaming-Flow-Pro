@@ -7,6 +7,7 @@ import com.example.data.local.StreamingAccountEntity
 import com.example.data.remote.FirebaseSyncManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import java.util.UUID
 
 class StreamingRepository(
     private val db: AppDatabase,
@@ -43,10 +44,10 @@ class StreamingRepository(
         firebaseSync.saveSaleToFirestore(sale)
 
         // Automatically ensure client is saved in client directory
-        val existingClient = clientDao.getClientById(sale.clientPhone, sale.userId)
+        val existingClient = if (sale.clientPhone.isBlank()) null else clientDao.getClientByPhone(sale.clientPhone, sale.userId)
         if (existingClient == null && sale.clientName.isNotBlank()) {
             val newClient = ClientEntity(
-                id = sale.clientPhone.ifBlank { sale.clientName.lowercase().replace(" ", "_") },
+                id = "client_${UUID.randomUUID()}",
                 userId = sale.userId,
                 name = sale.clientName,
                 phone = sale.clientPhone
@@ -93,98 +94,4 @@ class StreamingRepository(
         firebaseSync.deleteClientFromFirestore(userId, clientId)
     }
 
-    // --- SAMPLE DEMO DATA POPULATION (FOR FIRST TIME USERS) ---
-    suspend fun populateSampleDataIfEmpty(userId: String) {
-        val currentAccounts = accountDao.getAccountById("sample_1", userId)
-        if (currentAccounts == null) {
-            val now = System.currentTimeMillis()
-            val dayMs = 24 * 60 * 60 * 1000L
-
-            val account1 = StreamingAccountEntity(
-                id = "acc_netflix_1",
-                userId = userId,
-                platformName = "Netflix",
-                accountEmail = "ventas.netflix@stream.com",
-                accountPassword = "Pass1234#",
-                maxProfiles = 5,
-                cost = 12.0,
-                purchaseDate = now - (15 * dayMs),
-                expirationDate = now + (15 * dayMs)
-            )
-
-            val account2 = StreamingAccountEntity(
-                id = "acc_disney_1",
-                userId = userId,
-                platformName = "Disney+",
-                accountEmail = "cuentas.disney@stream.com",
-                accountPassword = "Pass1234#",
-                maxProfiles = 7,
-                cost = 9.0,
-                purchaseDate = now - (20 * dayMs),
-                expirationDate = now + (10 * dayMs)
-            )
-
-            saveAccount(account1)
-            saveAccount(account2)
-
-            // Sales
-            val sale1 = ProfileSaleEntity(
-                id = "sale_1",
-                userId = userId,
-                accountId = account1.id,
-                platformName = "Netflix",
-                accountEmail = account1.accountEmail,
-                profileName = "Perfil 1 - Carlos",
-                profilePin = "1234",
-                clientName = "Carlos Gómez",
-                clientPhone = "+5491122334455",
-                salePrice = 4.50,
-                costPrice = 2.40,
-                saleDate = now - (28 * dayMs),
-                expirationDate = now + (2 * dayMs), // Expires in 2 days (WARN)
-                paymentStatus = "PAID",
-                renewalStatus = "ACTIVE"
-            )
-
-            val sale2 = ProfileSaleEntity(
-                id = "sale_2",
-                userId = userId,
-                accountId = account1.id,
-                platformName = "Netflix",
-                accountEmail = account1.accountEmail,
-                profileName = "Perfil 2 - Maria",
-                profilePin = "5678",
-                clientName = "María Rodríguez",
-                clientPhone = "+5491133445566",
-                salePrice = 4.50,
-                costPrice = 2.40,
-                saleDate = now - (30 * dayMs),
-                expirationDate = now - (1 * dayMs), // Expired yesterday!
-                paymentStatus = "PENDING",
-                renewalStatus = "ACTIVE"
-            )
-
-            val sale3 = ProfileSaleEntity(
-                id = "sale_3",
-                userId = userId,
-                accountId = account2.id,
-                platformName = "Disney+",
-                accountEmail = account2.accountEmail,
-                profileName = "Perfil 1 - Juan",
-                profilePin = "0000",
-                clientName = "Juan Pérez",
-                clientPhone = "+5491144556677",
-                salePrice = 3.50,
-                costPrice = 1.30,
-                saleDate = now - (10 * dayMs),
-                expirationDate = now + (20 * dayMs),
-                paymentStatus = "PAID",
-                renewalStatus = "ACTIVE"
-            )
-
-            saveSale(sale1)
-            saveSale(sale2)
-            saveSale(sale3)
-        }
-    }
 }

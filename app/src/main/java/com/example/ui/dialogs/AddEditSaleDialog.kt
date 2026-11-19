@@ -354,7 +354,7 @@ fun AddEditSaleDialog(
                             val expiration = existingSale?.expirationDate ?: DateFormatter.addDaysToCurrentTime(days)
 
                             val saleEntity = ProfileSaleEntity(
-                                id = existingSale?.id ?: ("sale_" + UUID.randomUUID().toString().take(8)),
+                                id = existingSale?.id ?: ("sale_" + UUID.randomUUID().toString()),
                                 userId = existingSale?.userId ?: "",
                                 accountId = selectedAccount?.id ?: existingSale?.accountId ?: "",
                                 platformName = platformName.ifBlank { "Streaming" },
