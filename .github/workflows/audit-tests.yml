@@ -21,11 +21,11 @@ jobs:
         with:
           gradle-version: '9.3.1'
           cache-disabled: true
-      - name: Run local unit tests only (no APK, release, or upload)
+      - name: Assemble debug and run local tests only (no signing or upload)
         shell: bash
         run: |
           set +e
-          gradle test --console=plain > "$RUNNER_TEMP/gradle-test.log" 2>&1
+          gradle assembleDebug test --console=plain > "$RUNNER_TEMP/gradle-test.log" 2>&1
           result=$?
           if [ "$result" -ne 0 ]; then
             python3 - "$RUNNER_TEMP/gradle-test.log" <<'PYTEST'
@@ -50,6 +50,22 @@ jobs:
                   print("::error title=Gradle test diagnostic::" + line)
           else:
               print("::error title=Gradle test failure::Gradle test task failed; no safe diagnostic summary was found.")
+          PYTEST
+          else
+            python3 - "$RUNNER_TEMP/gradle-test.log" <<'PYTEST'
+          import glob, os, re, sys, xml.etree.ElementTree as ET
+          log = open(sys.argv[1], encoding="utf-8", errors="replace")
+          for raw in log:
+              line = raw.strip()
+              if re.fullmatch(r"> Task :(?:app:)?(?:assembleDebug|testDebugUnitTest)(?: UP-TO-DATE)?", line):
+                  print(line)
+          totals = [0, 0, 0, 0]
+          for path in glob.glob("app/build/test-results/testDebugUnitTest/TEST-*.xml"):
+              root = ET.parse(path).getroot()
+              vals = [int(root.get(k, "0")) for k in ("tests", "failures", "errors", "skipped")]
+              totals = [a + b for a, b in zip(totals, vals)]
+          print(f"Unit tests: {totals[0]} tests, {totals[1]} failures, {totals[2]} errors, {totals[3]} skipped")
+          print("BUILD SUCCESSFUL")
           PYTEST
           fi
           exit "$result"
