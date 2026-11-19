@@ -26,6 +26,10 @@ When an owner chooses to register Android later, the exact current Android `appl
 
 A safe first integration test uses the Firestore emulator or a separate disposable Firebase project with synthetic fixtures only: two test users; read/write their own fixtures; assert each cannot read/write the other's data; test Android/web round-trip with agreed fields; test retries, duplicate writes, conflicts and deletion semantics; verify the production project is not selected; discard the test project. No real customer/account passwords or production documents should be used.
 
+## Field-level audit follow-up (2026-11-19)
+
+A shared candidate contract and field comparison now lives in the web repo branch's `FIELD_LEVEL_CONTRACT.md`; it records that the client/customer fields can be mapped, but account and sale schemas differ in names, timestamps, relationships and contain credentials/PINs. Android now has an allowlisted client DTO mapping (`userId`, `name`, `phone`, optional `email`/`notes`, UTC ISO `createdAt`) and JVM tests. Account/sale writes remain raw legacy entities behind the hard-coded-false `FIRESTORE_SYNC_ENABLED` gate and must not be enabled. The web branch contains a Firestore Emulator Suite rule test using only synthetic users/data. It exercises candidate `/users/{uid}/...` rules, not production rules; production `/usuarios` and `/tokens_usados` rules/data remain untouched. See web branch `FIELD_LEVEL_CONTRACT.md` for execution steps and explicit limitations.
+
 ## Build fix note (2026-11-19)
 
 The audit CI run at commit `c9366873d9be78d0d5e558a67c9eb156be86811f` failed during Kotlin compilation because `FirebaseSyncManager.kt` referenced the generated `BuildConfig` without importing its namespace-qualified class. The Android Gradle namespace is `com.example` while the installable application ID is `com.aistudio.controlstreaming.sales`; the fix imports `com.example.BuildConfig`. This changes no Firebase configuration, package ID, Firestore path, or sync enablement.

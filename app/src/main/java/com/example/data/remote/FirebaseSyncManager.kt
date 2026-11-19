@@ -118,7 +118,7 @@ class FirebaseSyncManager {
 
     suspend fun saveClientToFirestore(client: ClientEntity) = sync(client.userId) { db ->
         db.collection("users").document(client.userId)
-            .collection("clients").document(client.id).set(client).await()
+            .collection("clients").document(client.id).set(client.toSharedFirestoreDocument()).await()
     }
 
     suspend fun deleteClientFromFirestore(userId: String, clientId: String) = sync(userId) { db ->
