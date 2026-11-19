@@ -24,6 +24,8 @@ class StreamingRepository(
     }
 
     suspend fun saveAccount(account: StreamingAccountEntity) {
+        val currentOwner = accountDao.getAccountByIdAnyOwner(account.id)?.userId
+        if (currentOwner != null && currentOwner != account.userId) return
         accountDao.insertAccount(account)
         firebaseSync.saveAccountToFirestore(account)
     }
@@ -40,6 +42,8 @@ class StreamingRepository(
     }
 
     suspend fun saveSale(sale: ProfileSaleEntity) {
+        val currentOwner = saleDao.getSaleByIdAnyOwner(sale.id)?.userId
+        if (currentOwner != null && currentOwner != sale.userId) return
         saleDao.insertSale(sale)
         firebaseSync.saveSaleToFirestore(sale)
 
@@ -85,6 +89,8 @@ class StreamingRepository(
     }
 
     suspend fun saveClient(client: ClientEntity) {
+        val currentOwner = clientDao.getClientByIdAnyOwner(client.id)?.userId
+        if (currentOwner != null && currentOwner != client.userId) return
         clientDao.insertClient(client)
         firebaseSync.saveClientToFirestore(client)
     }

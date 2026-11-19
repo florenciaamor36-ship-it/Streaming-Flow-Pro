@@ -3,6 +3,7 @@ package com.example.util
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 import java.security.MessageDigest
@@ -46,6 +47,16 @@ object LicenseManager {
 
     private const val KEY_LAST_KNOWN_TIME = "last_known_device_time"
 
+    private fun isVerifiedFirebaseUid(userId: String): Boolean {
+        if (userId.isBlank() || userId.startsWith("guest_")) return false
+        return try {
+            FirebaseAuth.getInstance().currentUser?.uid == userId
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+
     /**
      * Initializes trial period if first time.
      */
@@ -64,7 +75,7 @@ object LicenseManager {
      * Syncs license with Firestore for logged in user (restores subscription on new device/reinstall).
      */
     suspend fun syncCloudLicense(context: Context, userId: String) {
-        if (userId.isBlank() || userId.startsWith("guest_")) return
+        if (!isVerifiedFirebaseUid(userId)) return
         val db = firestore ?: return
         try {
             val prefs = getPrefs(context)
@@ -247,7 +258,7 @@ object LicenseManager {
             .apply()
 
         // Push to cloud asynchronously
-        if (userId.isNotBlank() && !userId.startsWith("guest_")) {
+        if (isVerifiedFirebaseUid(userId)) {
             val db = firestore
             if (db != null) {
                 try {

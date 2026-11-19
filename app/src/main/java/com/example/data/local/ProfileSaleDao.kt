@@ -14,6 +14,9 @@ interface ProfileSaleDao {
     @Query("SELECT * FROM profile_sales WHERE userId = :userId AND accountId = :accountId")
     fun getSalesByAccount(userId: String, accountId: String): Flow<List<ProfileSaleEntity>>
 
+    @Query("SELECT * FROM profile_sales WHERE id = :id LIMIT 1")
+    suspend fun getSaleByIdAnyOwner(id: String): ProfileSaleEntity?
+
     @Query("SELECT * FROM profile_sales WHERE id = :id AND userId = :userId LIMIT 1")
     suspend fun getSaleById(id: String, userId: String): ProfileSaleEntity?
 

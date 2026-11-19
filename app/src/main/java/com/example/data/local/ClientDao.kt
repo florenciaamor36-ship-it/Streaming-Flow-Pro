@@ -14,6 +14,9 @@ interface ClientDao {
     @Query("SELECT * FROM clients WHERE id = :id AND userId = :userId LIMIT 1")
     suspend fun getClientById(id: String, userId: String): ClientEntity?
 
+    @Query("SELECT * FROM clients WHERE id = :id LIMIT 1")
+    suspend fun getClientByIdAnyOwner(id: String): ClientEntity?
+
     @Query("SELECT * FROM clients WHERE phone = :phone AND userId = :userId LIMIT 1")
     suspend fun getClientByPhone(phone: String, userId: String): ClientEntity?
 

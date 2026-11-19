@@ -11,6 +11,9 @@ interface StreamingAccountDao {
     @Query("SELECT * FROM streaming_accounts WHERE userId = :userId ORDER BY expirationDate ASC")
     fun getAccountsForUser(userId: String): Flow<List<StreamingAccountEntity>>
 
+    @Query("SELECT * FROM streaming_accounts WHERE id = :id LIMIT 1")
+    suspend fun getAccountByIdAnyOwner(id: String): StreamingAccountEntity?
+
     @Query("SELECT * FROM streaming_accounts WHERE id = :id AND userId = :userId LIMIT 1")
     suspend fun getAccountById(id: String, userId: String): StreamingAccountEntity?
 
