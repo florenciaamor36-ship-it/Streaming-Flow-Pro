@@ -43,13 +43,8 @@ class AuthRepository(context: Context) {
     val userSession: StateFlow<UserSession?> = _userSession.asStateFlow()
 
     private fun loadVerifiedSession(): UserSession? {
-        val user = firebaseAuth?.currentUser
-        if (user != null) {
-            return verifiedFirebaseSession(user.uid, user.email, user.uid)
-        }
-
-        // Guest access is a separate, explicit local-only state. Legacy guest sessions are
-        // accepted only when their old marker and guest-prefixed ID are both present.
+        // Persisted explicit guest mode remains local-only even if a previous Firebase sign-out
+        // could not be completed. Firestore writes additionally verify owner UID at every call.
         val guestId = prefs.getString(KEY_GUEST_ID, null)
         val legacyId = prefs.getString("user_id", null)
         val legacyGuest = prefs.getBoolean("is_guest", false) && legacyId?.startsWith("guest_") == true
@@ -60,8 +55,9 @@ class AuthRepository(context: Context) {
             prefs.edit().putString(KEY_GUEST_ID, id).putBoolean(KEY_GUEST_ACTIVE, true).apply()
             return UserSession(userId = id, email = "Invitado Local", isGuest = true)
         }
-        // Old locally fabricated email sessions are never authenticated or restored.
-        return null
+
+        val user = firebaseAuth?.currentUser ?: return null
+        return verifiedFirebaseSession(user.uid, user.email, user.uid)
     }
 
     private fun authUnavailable(): Result<UserSession> =
