@@ -9,6 +9,14 @@ plugins {
   alias(libs.plugins.google.services)
 }
 
+// Empty by default: the WebView container stays disabled until a reviewed HTTPS web app URL is provided.
+val configuredWebAppUrl = providers.gradleProperty("WEB_APP_URL")
+  .orElse(providers.environmentVariable("WEB_APP_URL"))
+  .orElse("")
+  .get()
+  .trim()
+val escapedWebAppUrl = configuredWebAppUrl.replace("\\", "\\\\").replace("\"", "\\\"")
+
 android {
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
@@ -23,6 +31,7 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     // Fail closed until the web/Android schema and matching owner-only rules are verified together.
     buildConfigField("boolean", "FIRESTORE_SYNC_ENABLED", "false")
+    buildConfigField("String", "WEB_APP_URL", "\"$escapedWebAppUrl\"")
   }
 
   signingConfigs {
