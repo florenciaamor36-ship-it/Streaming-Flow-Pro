@@ -115,6 +115,10 @@ class AuthRepository(context: Context) {
         return session
     }
 
+    fun isVerifiedFirebaseSession(session: UserSession): Boolean =
+        !session.isGuest && firebaseAuth?.currentUser?.uid == session.userId &&
+            firebaseAuth?.currentUser?.email.equals(session.email, ignoreCase = true)
+
     fun signOut() {
         try {
             firebaseAuth?.signOut()

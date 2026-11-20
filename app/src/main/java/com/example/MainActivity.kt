@@ -31,10 +31,57 @@ sealed class NavScreen(val route: String, val title: String, val icon: ImageVect
 
 class MainActivity : ComponentActivity() {
     private val mainViewModel: MainViewModel by viewModels()
+    private lateinit var driveAuthorizationLauncher: androidx.activity.result.ActivityResultLauncher<androidx.activity.result.IntentSenderRequest>
+    private var pendingDriveOperation: MainViewModel.DriveOperation = MainViewModel.DriveOperation.SYNC
+
+    private fun startDriveAuthorization(operation: MainViewModel.DriveOperation) {
+        pendingDriveOperation = operation
+        if (!mainViewModel.driveOAuthConfigured()) {
+            android.widget.Toast.makeText(this, "Drive sync is unavailable until the app owner configures GOOGLE_DRIVE_CLIENT_ID and the Android OAuth client.", android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        val request = com.google.android.gms.auth.api.identity.AuthorizationRequest.builder()
+            .setRequestedScopes(listOf(com.google.android.gms.common.api.Scope("https://www.googleapis.com/auth/drive.appdata")))
+            .build()
+        com.google.android.gms.auth.api.identity.Identity.getAuthorizationClient(this).authorize(request)
+            .addOnSuccessListener { result ->
+                if (result.hasResolution()) {
+                    driveAuthorizationLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(result.pendingIntent!!.intentSender).build())
+                } else consumeDriveAuthorization(result)
+            }
+            .addOnFailureListener { error -> android.widget.Toast.makeText(this, "Google Drive authorization failed: ${error.message}", android.widget.Toast.LENGTH_LONG).show() }
+    }
+
+    private fun consumeDriveAuthorization(result: com.google.android.gms.auth.api.identity.AuthorizationResult) {
+        val token = result.accessToken
+        @Suppress("DEPRECATION")
+        val email = result.toGoogleSignInAccount()?.email
+        if (token.isNullOrBlank() || email.isNullOrBlank()) {
+            android.widget.Toast.makeText(this, "Google didn't return a Drive token and account identity. No data was synced.", android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        mainViewModel.syncDrive(token, email, pendingDriveOperation)
+    }
+
+    private fun registerDriveAuthorizationResult() {
+        driveAuthorizationLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult()) { result ->
+            if (result.resultCode != RESULT_OK || result.data == null) return@registerForActivityResult
+            try {
+                val authResult = com.google.android.gms.auth.api.identity.Identity.getAuthorizationClient(this).getAuthorizationResultFromIntent(result.data)
+                consumeDriveAuthorization(authResult)
+            } catch (error: Exception) {
+                android.widget.Toast.makeText(this, "Drive authorization was not completed. No data was synced.", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun authorizeDrive(operation: MainViewModel.DriveOperation) = startDriveAuthorization(operation)
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        registerDriveAuthorizationResult()
 
         setContent {
             ControlStreamingTheme {
@@ -49,7 +96,7 @@ class MainActivity : ComponentActivity() {
                         label = "AuthCrossfade"
                     ) { isLoggedIn ->
                         if (isLoggedIn) {
-                            MainAppContent(viewModel = mainViewModel)
+                            MainAppContent(viewModel = mainViewModel, onDriveSync = ::authorizeDrive)
                         } else {
                             AuthScreen(viewModel = mainViewModel)
                         }
@@ -62,7 +109,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainAppContent(viewModel: MainViewModel) {
+fun MainAppContent(viewModel: MainViewModel, onDriveSync: (MainViewModel.DriveOperation) -> Unit = {}) {
     var currentScreen by remember { mutableStateOf<NavScreen>(NavScreen.Dashboard) }
 
     val licenseStatus by viewModel.licenseStatus.collectAsState()
@@ -133,7 +180,7 @@ fun MainAppContent(viewModel: MainViewModel) {
                 NavScreen.Accounts -> AccountsScreen(viewModel = viewModel)
                 NavScreen.Clients -> ClientsScreen(viewModel = viewModel)
                 NavScreen.Reminders -> RemindersScreen(viewModel = viewModel)
-                NavScreen.Profile -> ProfileScreen(viewModel = viewModel)
+                NavScreen.Profile -> ProfileScreen(viewModel = viewModel, onDriveSync = onDriveSync)
             }
 
             // Subscription Lock Overlay when trial or paid license expires

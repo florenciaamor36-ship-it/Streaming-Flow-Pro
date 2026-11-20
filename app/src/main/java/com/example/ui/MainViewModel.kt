@@ -1,5 +1,6 @@
 package com.example.ui
 
+import com.example.BuildConfig
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -37,10 +38,53 @@ data class FinancialMetrics(
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val authRepository = AuthRepository(application)
+    val userSession: StateFlow<UserSession?> = authRepository.userSession
     private val database = AppDatabase.getInstance(application)
     private val streamingRepository = StreamingRepository(database)
+    private val driveSyncManager = com.example.data.drive.DriveSyncManager(application, database)
+    private val _driveSyncEnabled = MutableStateFlow(driveSyncManager.isEnabled(authRepository.userSession.value?.userId.orEmpty()))
+    val driveSyncEnabled: StateFlow<Boolean> = _driveSyncEnabled.asStateFlow()
+    private val _driveSyncStatus = MutableStateFlow("Drive sync is off")
+    val driveSyncStatus: StateFlow<String> = _driveSyncStatus.asStateFlow()
 
-    val userSession: StateFlow<UserSession?> = authRepository.userSession
+    fun setDriveSyncEnabled(enabled: Boolean) {
+        driveSyncManager.setEnabled(authRepository.userSession.value?.userId.orEmpty(), enabled)
+        _driveSyncEnabled.value = enabled
+        _driveSyncStatus.value = if (enabled) "Optional sync enabled. Nothing uploads until you tap a sync action." else "Drive sync is off"
+    }
+
+    fun syncDrive(accessToken: String, googleEmail: String, operation: DriveOperation) {
+        val session = userSession.value
+        if (session == null || !authRepository.isVerifiedFirebaseSession(session)) {
+            _driveSyncStatus.value = "Drive sync requires a verified Firebase sign-in; local/guest sessions are not eligible."
+            return
+        }
+        viewModelScope.launch {
+            _driveSyncStatus.value = "Checking your Drive snapshot…"
+            val result = try { when (operation) {
+                DriveOperation.SYNC -> driveSyncManager.sync(session.userId, session.email.orEmpty(), googleEmail, accessToken)
+                DriveOperation.CREATE_BACKUP -> driveSyncManager.confirmInitialUpload(session.userId, session.email.orEmpty(), googleEmail, accessToken)
+                DriveOperation.RESTORE_BACKUP -> driveSyncManager.confirmInitialRestore(session.userId, session.email.orEmpty(), googleEmail, accessToken)
+            } } catch (error: Exception) {
+                _driveSyncStatus.value = "Drive sync failed: ${error.message ?: "network or API error"}. Local data was kept."
+                return@launch
+            }
+            _driveSyncStatus.value = when (result) {
+                is com.example.data.drive.DriveSyncResult.Complete -> "${result.action}: ${result.accountCount} accounts, ${result.saleCount} sales, ${result.clientCount} clients."
+                is com.example.data.drive.DriveSyncResult.Blocked -> "${result.action}: ${result.detail}"
+            }
+        }
+    }
+
+    enum class DriveOperation { SYNC, CREATE_BACKUP, RESTORE_BACKUP }
+
+    fun isDriveEligible(): Boolean = userSession.value?.let { authRepository.isVerifiedFirebaseSession(it) } == true
+
+    fun driveOAuthConfigured(): Boolean = BuildConfig.GOOGLE_DRIVE_CLIENT_ID.isNotBlank()
+
+    init {
+        viewModelScope.launch { userSession.collect { session -> _driveSyncEnabled.value = driveSyncManager.isEnabled(session?.userId.orEmpty()) } }
+    }
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()

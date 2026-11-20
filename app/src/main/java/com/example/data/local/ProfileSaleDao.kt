@@ -11,6 +11,9 @@ interface ProfileSaleDao {
     @Query("SELECT * FROM profile_sales WHERE userId = :userId ORDER BY expirationDate ASC")
     fun getSalesForUser(userId: String): Flow<List<ProfileSaleEntity>>
 
+    @Query("SELECT * FROM profile_sales WHERE userId = :userId ORDER BY id ASC")
+    suspend fun getAllForUser(userId: String): List<ProfileSaleEntity>
+
     @Query("SELECT * FROM profile_sales WHERE userId = :userId AND accountId = :accountId")
     fun getSalesByAccount(userId: String, accountId: String): Flow<List<ProfileSaleEntity>>
 
