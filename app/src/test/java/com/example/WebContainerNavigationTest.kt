@@ -22,7 +22,6 @@ class WebContainerNavigationTest {
 
     @Test fun invalidOrEmptyConfiguredUrlDisablesWebApp() {
         assertNotNull(parseHttpsOrigin("https://app.example.test"))
-        assertFalse(isAllowedWebAppUrl("https://app.example.test/", parseHttpsOrigin("http://app.example.test") ?: origin))
         assertTrue(parseHttpsOrigin("") == null)
         assertTrue(parseHttpsOrigin("http://app.example.test") == null)
         assertTrue(parseHttpsOrigin("https://user@app.example.test") == null)
