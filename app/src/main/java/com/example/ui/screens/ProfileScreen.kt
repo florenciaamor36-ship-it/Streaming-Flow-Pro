@@ -111,7 +111,7 @@ fun ProfileScreen(
         Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Copia opcional en Google Drive", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("Usa appDataFolder con el alcance mínimo drive.appdata. No se sincroniza automáticamente. Las contraseñas, PIN, correos de acceso a servicios y notas libres quedan fuera; los datos compartidos no están cifrados por esta carpeta y pueden incluir nombres, teléfonos y ventas.", style = MaterialTheme.typography.bodySmall)
+                Text("Usa appDataFolder con el alcance mínimo drive.appdata y solo cuando tocás una acción. Contraseñas, PIN, correos de acceso, teléfonos y emails de clientes/proveedores, y notas libres quedan fuera. Se comparten nombres y datos comerciales, que no están cifrados por esta carpeta.", style = MaterialTheme.typography.bodySmall)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Checkbox(checked = driveEnabled, onCheckedChange = { enabled -> if (enabled) showDriveConsent = true else viewModel.setDriveSyncEnabled(false) })
                     Text(if (driveEnabled) "Sincronización opcional activada" else "Quiero habilitar la sincronización opcional")
@@ -130,7 +130,7 @@ fun ProfileScreen(
         if (showDriveConsent) AlertDialog(
             onDismissRequest = { showDriveConsent = false },
             title = { Text("Habilitar copia opcional") },
-            text = { Text("Al activar, habilitás una función manual de copia en tu propio Google Drive. La carpeta no cifra los datos. Se excluyen contraseñas, PIN, correos de acceso y notas; contactos/ventas seguirán siendo datos personales. ¿Querés habilitarla?") },
+            text = { Text("Al activar, habilitás una función manual de copia en tu propio Google Drive. La carpeta no cifra los datos. Se excluyen contraseñas, PIN, correos de acceso, teléfonos y emails de clientes/proveedores, y notas; nombres y datos comerciales pueden seguir siendo sensibles. ¿Querés habilitarla?") },
             confirmButton = { TextButton(onClick = { viewModel.setDriveSyncEnabled(true); showDriveConsent = false }) { Text("Habilitar") } },
             dismissButton = { TextButton(onClick = { showDriveConsent = false }) { Text("Cancelar") } }
         )
@@ -140,7 +140,7 @@ fun ProfileScreen(
             AlertDialog(
                 onDismissRequest = { pendingDriveAction = null },
                 title = { Text(if (restore) "Confirmar restauración" else "Confirmar copia inicial") },
-                text = { Text(if (restore) "Tu dispositivo tiene ${accounts.size} cuentas, ${allSales.size} ventas y ${clients.size} clientes. Se comprobará la copia de Drive y solo se importará si el dispositivo está vacío y las cuentas coinciden. ¿Continuar?" else "Se enviarán a tu Drive ${accounts.size} cuentas, ${allSales.size} ventas y ${clients.size} clientes, sin contraseñas, PIN ni correos de acceso. Los nombres, teléfonos y datos comerciales no están cifrados. ¿Crear la copia?") },
+                text = { Text(if (restore) "Tu dispositivo tiene ${accounts.size} cuentas, ${allSales.size} ventas y ${clients.size} clientes. Se comprobará la copia de Drive y solo se importará si el dispositivo está vacío y las cuentas coinciden. ¿Continuar?" else "Se enviarán a tu Drive ${accounts.size} cuentas, ${allSales.size} ventas y ${clients.size} clientes, sin contraseñas, PIN, correos de acceso, teléfonos ni emails de clientes/proveedores. Los nombres y datos comerciales no están cifrados. ¿Crear la copia?") },
                 confirmButton = { TextButton(onClick = { pendingDriveAction = null; onDriveSync(action) }) { Text(if (restore) "Restaurar" else "Crear copia") } },
                 dismissButton = { TextButton(onClick = { pendingDriveAction = null }) { Text("Cancelar") } }
             )

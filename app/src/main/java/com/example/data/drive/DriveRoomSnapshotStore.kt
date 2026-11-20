@@ -14,12 +14,14 @@ class DriveRoomSnapshotStore(private val db: AppDatabase) {
             SharedAccount(it.id, it.platformName, it.maxProfiles, it.cost, it.purchaseDate, it.expirationDate, it.supplierName)
         }
         val sales = db.profileSaleDao().getAllForUser(userId).map {
-            SharedSale(it.id, it.accountId, it.platformName, it.profileName, it.clientName, it.clientPhone,
+            // Keep the v1 shape while deliberately omitting direct customer contact data.
+            SharedSale(it.id, it.accountId, it.platformName, it.profileName, it.clientName, "",
                 it.salePrice, it.costPrice, it.saleDate, it.expirationDate, it.paymentStatus, it.renewalStatus, it.saleType,
                 it.supplierName, it.reminderSent)
         }
         val clients = db.clientDao().getAllForUser(userId).map {
-            SharedClient(it.id, it.name, it.phone, it.email, it.createdAt)
+            // Client name/ID remain useful for linking sales; phone and email are not backed up.
+            SharedClient(it.id, it.name, "", "", it.createdAt)
         }
         return DriveSnapshotData(accounts, sales, clients)
     }
