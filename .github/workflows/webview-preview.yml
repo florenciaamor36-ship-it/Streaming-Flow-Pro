@@ -1,0 +1,29 @@
+name: Build isolated WebView preview APK
+on:
+  workflow_dispatch:
+  push:
+    branches: ["preview/webview-worker-integration"]
+permissions:
+  contents: read
+jobs:
+  build-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+          cache-disabled: true
+      - name: Build debug preview (not for production data)
+        run: gradle assembleDebug testDebugUnitTest --console=plain
+        env:
+          WEB_APP_URL: https://ui-preview.stream-flow-ui-preview-20261120.pages.dev/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StreamFlowPro-WebView-PREVIEW-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
