@@ -2,7 +2,7 @@ name: Android build and Drive sync tests
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main", "master", "feature/drive-sync-runtime-privacy-2026-11-20" ]
   pull_request:
     branches: [ "main", "master" ]
   workflow_dispatch:
