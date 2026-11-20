@@ -1,13 +1,12 @@
 package com.example
 
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
 import android.view.ViewGroup
 import android.webkit.CookieManager
-import android.webkit.SafeBrowsingResponse
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -27,7 +26,6 @@ class WebContainerActivity : ComponentActivity() {
     private var webView: WebView? = null
     private var uploadCallback: ValueCallback<Array<Uri>>? = null
     private var baseOrigin: URI? = null
-    private var errorView: LinearLayout? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,9 +33,7 @@ class WebContainerActivity : ComponentActivity() {
         val origin = parseHttpsOrigin(configured)
         if (origin == null) {
             showMessage(
-                "La versión web no está configurada.
-
-" +
+                "La versión web no está configurada.\n\n" +
                     "Definí WEB_APP_URL con la URL HTTPS de la aplicación web y volvé a compilar. " +
                     "No se cargó ningún sitio."
             )
@@ -59,9 +55,9 @@ class WebContainerActivity : ComponentActivity() {
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             javaScriptCanOpenWindowsAutomatically = false
             setSupportMultipleWindows(false)
-            safeBrowsingEnabled = true
         }
         CookieManager.getInstance().setAcceptCookie(true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) view.settings.safeBrowsingEnabled = true
         // No addJavascriptInterface: page scripts cannot invoke native methods.
         view.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(v: WebView, request: WebResourceRequest): Boolean =
@@ -132,13 +128,11 @@ class WebContainerActivity : ComponentActivity() {
                 val url = BuildConfig.WEB_APP_URL.trim()
                 if (parseHttpsOrigin(url) != null) {
                     baseOrigin = parseHttpsOrigin(url)
-                    errorView = null
                     recreate()
                 }
             }
         }
         layout.addView(retry, LinearLayout.LayoutParams(-1, -2))
-        errorView = layout
         setContentView(layout)
     }
 
