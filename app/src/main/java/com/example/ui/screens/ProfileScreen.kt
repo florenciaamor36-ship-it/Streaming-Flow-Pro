@@ -38,6 +38,7 @@ fun ProfileScreen(
     val session by viewModel.userSession.collectAsState()
     val metrics by viewModel.metrics.collectAsState()
     val clients by viewModel.clients.collectAsState()
+    val allSales by viewModel.allSales.collectAsState()
     val licenseStatus by viewModel.licenseStatus.collectAsState()
     val driveEnabled by viewModel.driveSyncEnabled.collectAsState()
     val driveStatus by viewModel.driveSyncStatus.collectAsState()
@@ -139,7 +140,7 @@ fun ProfileScreen(
             AlertDialog(
                 onDismissRequest = { pendingDriveAction = null },
                 title = { Text(if (restore) "Confirmar restauración" else "Confirmar copia inicial") },
-                text = { Text(if (restore) "La restauración solo se permite si no hay datos locales y la cuenta coincide. Los datos de Drive incluyen ${accounts.size} cuentas, ${allSales.size} ventas y ${clients.size} clientes. ¿Continuar?" else "Se enviarán a tu Drive ${accounts.size} cuentas, ${allSales.size} ventas y ${clients.size} clientes, sin contraseñas, PIN ni correos de acceso. Los nombres, teléfonos y datos comerciales no están cifrados. ¿Crear la copia?") },
+                text = { Text(if (restore) "Tu dispositivo tiene ${accounts.size} cuentas, ${allSales.size} ventas y ${clients.size} clientes. Se comprobará la copia de Drive y solo se importará si el dispositivo está vacío y las cuentas coinciden. ¿Continuar?" else "Se enviarán a tu Drive ${accounts.size} cuentas, ${allSales.size} ventas y ${clients.size} clientes, sin contraseñas, PIN ni correos de acceso. Los nombres, teléfonos y datos comerciales no están cifrados. ¿Crear la copia?") },
                 confirmButton = { TextButton(onClick = { pendingDriveAction = null; onDriveSync(action) }) { Text(if (restore) "Restaurar" else "Crear copia") } },
                 dismissButton = { TextButton(onClick = { pendingDriveAction = null }) { Text("Cancelar") } }
             )
