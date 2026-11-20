@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - 'audit/fix-firestore-buildconfig-2026-11-19'
+      - 'audit/firebase-config-runtime-synthesis-2026-11-20'
 
 permissions:
   contents: read
@@ -22,13 +22,21 @@ jobs:
         with:
           gradle-version: '9.3.1'
           cache-disabled: true
-      - name: Validate and materialize private Firebase configuration
+      - name: Test Firebase configuration synthesis
+        run: python3 scripts/test-prepare-firebase-config.py
+      - name: Validate and synthesize Android Firebase configuration
         env:
-          FIREBASE_ANDROID_JSON: ${{ secrets.FIREBASE_ANDROID_JSON }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          FIREBASE_PROJECT_NUMBER: ${{ vars.FIREBASE_PROJECT_NUMBER }}
+          FIREBASE_ANDROID_APP_ID: ${{ vars.FIREBASE_ANDROID_APP_ID }}
+          FIREBASE_ANDROID_PACKAGE_NAME: ${{ vars.FIREBASE_ANDROID_PACKAGE_NAME }}
+          FIREBASE_ANDROID_API_KEY: ${{ vars.FIREBASE_ANDROID_API_KEY }}
         run: python3 scripts/prepare-firebase-config.py
+      - name: Run unit tests
+        run: gradle testDebugUnitTest --console=plain
       - name: Assemble Firebase-configured debug APK
         run: gradle assembleDebug --console=plain
-      - name: Remove private Firebase configuration
+      - name: Remove synthesized Firebase configuration
         if: always()
         run: rm -f app/google-services.json
       - uses: actions/upload-artifact@v4
