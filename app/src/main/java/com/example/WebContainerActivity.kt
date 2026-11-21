@@ -56,7 +56,7 @@ class WebContainerActivity : ComponentActivity() {
     }
     private var pendingNotificationPermission = false
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != NOTIFICATION_PERMISSION_REQUEST) return
         pendingNotificationPermission = false
