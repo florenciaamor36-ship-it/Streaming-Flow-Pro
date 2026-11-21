@@ -6,7 +6,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.webkit.JavaScriptReplyProxy
 import androidx.webkit.WebMessageCompat
 import androidx.webkit.WebViewCompat
@@ -55,7 +54,13 @@ class WebContainerActivity : ComponentActivity() {
             mainHandler.postDelayed(this, SESSION_CAPTURE_INTERVAL_MS)
         }
     }
-    private val notificationsPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+    private var pendingNotificationPermission = false
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != NOTIFICATION_PERMISSION_REQUEST) return
+        pendingNotificationPermission = false
+        val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
         val accountId = SessionTokenStore.readAccountId(this)
         if (granted && !accountId.isNullOrBlank()) {
             NotificationHelper.createNotificationChannel(this)
@@ -232,7 +237,10 @@ class WebContainerActivity : ComponentActivity() {
             return
         }
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            notificationsPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            if (!pendingNotificationPermission) {
+                pendingNotificationPermission = true
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_PERMISSION_REQUEST)
+            }
         } else {
             NotificationHelper.createNotificationChannel(this)
             ExpiryNotificationWorker.enable(this, accountId)
@@ -363,7 +371,7 @@ class WebContainerActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    private companion object { const val REQUEST_UPLOAD = 4802; const val SESSION_CAPTURE_INTERVAL_MS = 15_000L }
+    private companion object { const val REQUEST_UPLOAD = 4802; const val NOTIFICATION_PERMISSION_REQUEST = 4803; const val SESSION_CAPTURE_INTERVAL_MS = 15_000L }
 }
 
 /** Restrict in-WebView navigation to the configured HTTPS origin (host and effective port). */
