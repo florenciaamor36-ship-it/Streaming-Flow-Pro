@@ -105,10 +105,13 @@ class ExpiryNotificationWorker(context: Context, params: WorkerParameters) : Cor
 
         fun enable(context: Context, accountId: String) {
             require(accountId.isNotBlank())
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val changedAccount = prefs.getString(OPT_IN_ACCOUNT_ID, null) != accountId
+            val editor = prefs.edit()
                 .putBoolean(ENABLED, true)
                 .putString(OPT_IN_ACCOUNT_ID, accountId)
-                .apply()
+            if (changedAccount) editor.remove(LAST_DAY)
+            editor.apply()
             val request = androidx.work.PeriodicWorkRequestBuilder<ExpiryNotificationWorker>(6, TimeUnit.HOURS)
                 .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
                 .build()

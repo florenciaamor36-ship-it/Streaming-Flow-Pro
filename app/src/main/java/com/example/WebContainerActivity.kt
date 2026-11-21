@@ -111,8 +111,7 @@ class WebContainerActivity : ComponentActivity() {
             override fun onPageFinished(v: WebView, url: String) {
                 super.onPageFinished(v, url)
                 if (isAppPage(url)) {
-                    captureBackgroundSessionToken()
-                    if (nativeNotificationBridgeAvailable) installWebNotificationFacade()
+                    if (nativeNotificationBridgeAvailable) captureBackgroundSessionToken()
                     else v.evaluateJavascript("window.dispatchEvent(new CustomEvent('streamflow:native-unavailable'))", null)
                     mainHandler.removeCallbacks(captureSessionRunnable)
                     mainHandler.postDelayed(captureSessionRunnable, SESSION_CAPTURE_INTERVAL_MS)
