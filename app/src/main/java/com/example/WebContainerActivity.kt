@@ -195,6 +195,7 @@ class WebContainerActivity : ComponentActivity() {
                             "enable-expiry-notifications" -> requestExpiryNotifications()
                             "disable-expiry-notifications" -> {
                                 ExpiryNotificationWorker.disable(this@WebContainerActivity)
+                                SessionTokenStore.clear(this@WebContainerActivity)
                                 dispatchNativeNotificationState(false, "Avisos de vencimientos desactivados en Android.")
                             }
                         }
