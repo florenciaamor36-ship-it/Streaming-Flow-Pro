@@ -16,6 +16,10 @@ import com.example.notifications.ExpiryNotificationWorker
 import com.example.notifications.SessionTokenStore
 import com.example.util.NotificationHelper
 import org.json.JSONTokener
+import org.json.JSONObject
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
@@ -40,6 +44,10 @@ class WebContainerActivity : ComponentActivity() {
     private var webView: WebView? = null
     private var uploadCallback: ValueCallback<Array<Uri>>? = null
     private var baseOrigin: URI? = null
+    private var nativeNotificationBridgeAvailable = false
+    @Volatile private var pendingSessionToken: String? = null
+    @Volatile private var sessionCaptureGeneration: Int = 0
+    private val sessionClient by lazy { OkHttpClient.Builder().callTimeout(15, TimeUnit.SECONDS).build() }
     private val mainHandler = Handler(Looper.getMainLooper())
     private val captureSessionRunnable = object : Runnable {
         override fun run() {
@@ -48,12 +56,14 @@ class WebContainerActivity : ComponentActivity() {
         }
     }
     private val notificationsPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) {
+        val accountId = SessionTokenStore.readAccountId(this)
+        if (granted && !accountId.isNullOrBlank()) {
             NotificationHelper.createNotificationChannel(this)
-            ExpiryNotificationWorker.enable(this)
+            ExpiryNotificationWorker.enable(this, accountId)
             dispatchNativeNotificationState(true, "Avisos de vencimientos activados en Android.")
         } else {
-            dispatchNativeNotificationState(false, "No se concedió permiso para mostrar notificaciones.")
+            val message = if (!granted) "No se concedió permiso para mostrar notificaciones." else "No se pudo asociar el aviso a una cuenta activa. Volvé a iniciar sesión e intentá de nuevo."
+            dispatchNativeNotificationState(false, message)
         }
     }
 
@@ -93,7 +103,7 @@ class WebContainerActivity : ComponentActivity() {
             javaScriptCanOpenWindowsAutomatically = false
             setSupportMultipleWindows(false)
         }
-        installOriginRestrictedNotificationBridge(view)
+        nativeNotificationBridgeAvailable = installOriginRestrictedNotificationBridge(view)
         CookieManager.getInstance().setAcceptCookie(true)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) view.settings.safeBrowsingEnabled = true
         // The notification bridge exposes only toggles; it never returns credentials or session data.
@@ -102,7 +112,8 @@ class WebContainerActivity : ComponentActivity() {
                 super.onPageFinished(v, url)
                 if (isAppPage(url)) {
                     captureBackgroundSessionToken()
-                    installWebNotificationFacade()
+                    if (nativeNotificationBridgeAvailable) installWebNotificationFacade()
+                    else v.evaluateJavascript("window.dispatchEvent(new CustomEvent('streamflow:native-unavailable'))", null)
                     mainHandler.removeCallbacks(captureSessionRunnable)
                     mainHandler.postDelayed(captureSessionRunnable, SESSION_CAPTURE_INTERVAL_MS)
                 }
@@ -164,21 +175,68 @@ class WebContainerActivity : ComponentActivity() {
         view.evaluateJavascript("(function(){try{return localStorage.getItem('stream_flow_session')}catch(e){return null}})()") { encoded ->
             val token = try { JSONTokener(encoded ?: "null").nextValue() as? String } catch (_: Exception) { null }
             if (token.isNullOrBlank()) {
+                ++sessionCaptureGeneration
+                pendingSessionToken = null
+                ExpiryNotificationWorker.disable(this)
                 SessionTokenStore.clear(this)
-            } else {
-                try {
-                    SessionTokenStore.save(this, token)
-                } catch (_: Exception) { SessionTokenStore.clear(this) }
+                if (nativeNotificationBridgeAvailable) installWebNotificationFacade()
+                return@evaluateJavascript
             }
+            if (token == SessionTokenStore.read(this) && !SessionTokenStore.readAccountId(this).isNullOrBlank()) {
+                if (nativeNotificationBridgeAvailable) installWebNotificationFacade()
+                return@evaluateJavascript
+            }
+            if (pendingSessionToken == token) return@evaluateJavascript
+
+            val generation = ++sessionCaptureGeneration
+            // A changed bearer token may mean a different account signed in. Stop any
+            // old account's periodic job before the new session is verified server-side.
+            ExpiryNotificationWorker.disable(this)
+            SessionTokenStore.clear(this)
+            pendingSessionToken = token
+            Thread {
+                try {
+                    val request = Request.Builder()
+                        .url("https://stream-flow-api.tiendasshoficial.workers.dev/api/auth/me")
+                        .header("Authorization", "Bearer $token")
+                        .get()
+                        .build()
+                    sessionClient.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) {
+                            if (response.code == 401 && generation == sessionCaptureGeneration) {
+                                SessionTokenStore.clear(this)
+                                ExpiryNotificationWorker.disable(this)
+                            }
+                            return@use
+                        }
+                        val userId = JSONObject(response.body?.string().orEmpty()).optJSONObject("user")?.optString("id").orEmpty()
+                        if (userId.isBlank() || generation != sessionCaptureGeneration) return@use
+                        SessionTokenStore.save(this, token, userId)
+                        runOnUiThread {
+                            if (generation == sessionCaptureGeneration && nativeNotificationBridgeAvailable) installWebNotificationFacade()
+                        }
+                    }
+                } catch (_: Exception) {
+                    // Stay fail-closed: don't run reminders against a stale account session.
+                } finally {
+                    if (generation == sessionCaptureGeneration) pendingSessionToken = null
+                }
+            }.start()
         }
     }
 
     private fun requestExpiryNotifications() {
+        val accountId = SessionTokenStore.readAccountId(this)
+        if (accountId.isNullOrBlank()) {
+            captureBackgroundSessionToken()
+            dispatchNativeNotificationState(false, "No se detectó una sesión activa. Volvé a entrar e intentá de nuevo.")
+            return
+        }
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             notificationsPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
             NotificationHelper.createNotificationChannel(this)
-            ExpiryNotificationWorker.enable(this)
+            ExpiryNotificationWorker.enable(this, accountId)
             dispatchNativeNotificationState(true, "Avisos de vencimientos activados en Android.")
         }
     }
@@ -188,8 +246,8 @@ class WebContainerActivity : ComponentActivity() {
         webView?.post { webView?.evaluateJavascript("window.dispatchEvent(new CustomEvent('streamflow:native-notification-state',{detail:{enabled:$enabled,message:$safeMessage}}))", null) }
     }
 
-    private fun installOriginRestrictedNotificationBridge(view: WebView) {
-        if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return
+    private fun installOriginRestrictedNotificationBridge(view: WebView): Boolean {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return false
         WebViewCompat.addWebMessageListener(
             view,
             "StreamFlowAndroidNative",
@@ -202,7 +260,6 @@ class WebContainerActivity : ComponentActivity() {
                             "enable-expiry-notifications" -> requestExpiryNotifications()
                             "disable-expiry-notifications" -> {
                                 ExpiryNotificationWorker.disable(this@WebContainerActivity)
-                                SessionTokenStore.clear(this@WebContainerActivity)
                                 dispatchNativeNotificationState(false, "Avisos de vencimientos desactivados en Android.")
                             }
                         }
@@ -210,6 +267,7 @@ class WebContainerActivity : ComponentActivity() {
                 }
             }
         )
+        return true
     }
 
     private fun installWebNotificationFacade() {

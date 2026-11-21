@@ -25,6 +25,12 @@ class ExpiryNotificationWorker(context: Context, params: WorkerParameters) : Cor
         val prefs = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (!prefs.getBoolean(ENABLED, false)) return Result.success()
         val token = SessionTokenStore.read(applicationContext) ?: return Result.success()
+        val accountId = SessionTokenStore.readAccountId(applicationContext)
+        if (accountId.isNullOrBlank() || accountId != prefs.getString(OPT_IN_ACCOUNT_ID, null)) {
+            disable(applicationContext)
+            SessionTokenStore.clear(applicationContext)
+            return Result.success()
+        }
         return try {
             val request = Request.Builder()
                 .url("https://stream-flow-api.tiendasshoficial.workers.dev/api/notifications/expirations")
@@ -86,14 +92,23 @@ class ExpiryNotificationWorker(context: Context, params: WorkerParameters) : Cor
         private const val PREFS = "streamflow_notification_session"
         private const val ENABLED = "expiry_notifications_enabled"
         private const val LAST_DAY = "last_expiry_notice_day"
+        private const val OPT_IN_ACCOUNT_ID = "expiry_notification_account_id"
         private const val EXPIRY_NOTIFICATION_ID = 7314
         private const val WORK_NAME = "streamflow-expiry-notification-check"
         private val client = OkHttpClient.Builder().callTimeout(20, TimeUnit.SECONDS).build()
 
-        fun isEnabled(context: Context): Boolean = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(ENABLED, false)
+        fun isEnabled(context: Context): Boolean {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val currentAccount = SessionTokenStore.readAccountId(context)
+            return prefs.getBoolean(ENABLED, false) && !currentAccount.isNullOrBlank() && prefs.getString(OPT_IN_ACCOUNT_ID, null) == currentAccount
+        }
 
-        fun enable(context: Context) {
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(ENABLED, true).apply()
+        fun enable(context: Context, accountId: String) {
+            require(accountId.isNotBlank())
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putBoolean(ENABLED, true)
+                .putString(OPT_IN_ACCOUNT_ID, accountId)
+                .apply()
             val request = androidx.work.PeriodicWorkRequestBuilder<ExpiryNotificationWorker>(6, TimeUnit.HOURS)
                 .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
                 .build()
@@ -105,7 +120,7 @@ class ExpiryNotificationWorker(context: Context, params: WorkerParameters) : Cor
         }
 
         fun disable(context: Context) {
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(ENABLED, false).apply()
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(ENABLED, false).remove(OPT_IN_ACCOUNT_ID).apply()
             androidx.work.WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
         }
     }

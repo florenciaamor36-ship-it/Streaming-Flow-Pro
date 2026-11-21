@@ -16,18 +16,25 @@ object SessionTokenStore {
     private const val CIPHER_TEXT = "ciphertext"
     private const val IV = "iv"
     private const val KEY_ALIAS = "streamflow_expiry_worker_key"
+    private const val ACCOUNT_ID = "account_id"
 
     @Synchronized
-    fun save(context: Context, token: String) {
+    fun save(context: Context, token: String, accountId: String) {
         require(token.length in 40..200)
+        require(accountId.length in 1..200)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
         val encrypted = cipher.doFinal(token.toByteArray(Charsets.UTF_8))
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(IV, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
             .putString(CIPHER_TEXT, Base64.encodeToString(encrypted, Base64.NO_WRAP))
+            .putString(ACCOUNT_ID, accountId)
             .apply()
     }
+
+    @Synchronized
+    fun readAccountId(context: Context): String? =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(ACCOUNT_ID, null)
 
     @Synchronized
     fun read(context: Context): String? {
@@ -46,7 +53,7 @@ object SessionTokenStore {
 
     @Synchronized
     fun clear(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(IV).remove(CIPHER_TEXT).apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(IV).remove(CIPHER_TEXT).remove(ACCOUNT_ID).apply()
     }
 
     private fun getOrCreateKey(): SecretKey {
