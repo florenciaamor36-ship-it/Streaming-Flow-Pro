@@ -70,10 +70,10 @@ jobs:
           test -s "$RUNNER_TEMP/streamflow-upload-key.p12"
 
       - name: Build signed release APK and Android App Bundle
-        run: gradle assembleRelease bundleRelease testReleaseUnitTest --console=plain
+        run: gradle testDebugUnitTest assembleRelease bundleRelease --console=plain
         env:
           WEB_APP_URL: https://florenciaamor36-ship-it.github.io/stream/
-          KEYSTORE_PATH: ${{ runner.temp }}/streamflow-upload-key.jks
+          KEYSTORE_PATH: ${{ runner.temp }}/streamflow-upload-key.p12
           STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
 
