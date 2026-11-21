@@ -1,8 +1,8 @@
-name: Build isolated WebView preview APK
+name: Build production WebView APK
 on:
   workflow_dispatch:
   push:
-    branches: ["preview/webview-worker-integration"]
+    branches: ["release/production-web-staging"]
 permissions:
   contents: read
 jobs:
@@ -18,12 +18,12 @@ jobs:
         with:
           gradle-version: '9.3.1'
           cache-disabled: true
-      - name: Build debug preview (not for production data)
+      - name: Build production-target debug APK
         run: gradle assembleDebug testDebugUnitTest --console=plain
         env:
-          WEB_APP_URL: https://ui-preview.stream-flow-ui-preview-20261120.pages.dev/
+          WEB_APP_URL: https://florenciaamor36-ship-it.github.io/stream/
       - uses: actions/upload-artifact@v4
         with:
-          name: StreamFlowPro-WebView-PREVIEW-debug
+          name: StreamFlowPro-WebView-production-target-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 7

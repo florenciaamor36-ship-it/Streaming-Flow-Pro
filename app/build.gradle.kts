@@ -22,11 +22,11 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.controlstreaming.sales"
+    applicationId = "com.florenciaamor36.streamflowpro.web"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = 2
+    versionName = "2.0.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     // Fail closed until the web/Android schema and matching owner-only rules are verified together.
