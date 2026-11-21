@@ -70,6 +70,13 @@ class WebContainerActivity : ComponentActivity() {
             return
         }
         baseOrigin = origin
+        val requestedUrl = intent?.dataString?.takeIf { target ->
+            try {
+                val targetUri = URI(target)
+                val appPath = URI(configured).path.orEmpty().ifBlank { "/" }
+                isAllowedWebAppUrl(target, origin) && targetUri.path.startsWith(appPath)
+            } catch (_: Exception) { false }
+        } ?: configured
         val view = WebView(this)
         webView = view
         view.layoutParams = ViewGroup.LayoutParams(
@@ -136,8 +143,8 @@ class WebContainerActivity : ComponentActivity() {
             }
         }
         setContentView(view)
-        if (savedInstanceState == null) view.loadUrl(configured)
-        else view.restoreState(savedInstanceState) ?: view.loadUrl(configured)
+        if (savedInstanceState == null) view.loadUrl(requestedUrl)
+        else view.restoreState(savedInstanceState) ?: view.loadUrl(requestedUrl)
     }
 
     private fun routeNavigation(target: String): Boolean {

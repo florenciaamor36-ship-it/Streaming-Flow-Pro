@@ -64,7 +64,9 @@ class ExpiryNotificationWorker(context: Context, params: WorkerParameters) : Cor
         val openApp = PendingIntent.getActivity(
             applicationContext,
             7314,
-            Intent(applicationContext, WebContainerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            Intent(applicationContext, WebContainerActivity::class.java)
+                .setData(android.net.Uri.parse("https://florenciaamor36-ship-it.github.io/stream/?tab=expirations"))
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val notification = NotificationCompat.Builder(applicationContext, NotificationHelper.CHANNEL_ID)
