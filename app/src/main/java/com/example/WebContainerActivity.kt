@@ -6,8 +6,11 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
-import android.webkit.JavascriptInterface
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.webkit.JavaScriptReplyProxy
+import androidx.webkit.WebMessageCompat
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import androidx.core.content.ContextCompat
 import com.example.notifications.ExpiryNotificationWorker
 import com.example.notifications.SessionTokenStore
@@ -83,16 +86,16 @@ class WebContainerActivity : ComponentActivity() {
             javaScriptCanOpenWindowsAutomatically = false
             setSupportMultipleWindows(false)
         }
-        // Exposes only notification toggles/state; the bearer token is never passed through JavaScript.
-        view.addJavascriptInterface(NotificationBridge(), "StreamFlowAndroid")
+        installOriginRestrictedNotificationBridge(view)
         CookieManager.getInstance().setAcceptCookie(true)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) view.settings.safeBrowsingEnabled = true
         // The notification bridge exposes only toggles; it never returns credentials or session data.
         view.webViewClient = object : WebViewClient() {
             override fun onPageFinished(v: WebView, url: String) {
                 super.onPageFinished(v, url)
-                if (baseOrigin?.let { isAllowedWebAppUrl(url, it) } == true) {
+                if (isAppPage(url)) {
                     captureBackgroundSessionToken()
+                    installWebNotificationFacade()
                     mainHandler.removeCallbacks(captureSessionRunnable)
                     mainHandler.postDelayed(captureSessionRunnable, SESSION_CAPTURE_INTERVAL_MS)
                 }
@@ -178,16 +181,40 @@ class WebContainerActivity : ComponentActivity() {
         webView?.post { webView?.evaluateJavascript("window.dispatchEvent(new CustomEvent('streamflow:native-notification-state',{detail:{enabled:$enabled,message:$safeMessage}}))", null) }
     }
 
-    private inner class NotificationBridge {
-        @JavascriptInterface fun isExpiryNotificationsEnabled(): Boolean = ExpiryNotificationWorker.isEnabled(this@WebContainerActivity)
-        @JavascriptInterface fun requestExpiryNotifications() { runOnUiThread { requestExpiryNotifications() } }
-        @JavascriptInterface fun disableExpiryNotifications() {
-            runOnUiThread {
-                ExpiryNotificationWorker.disable(this@WebContainerActivity)
-                dispatchNativeNotificationState(false, "Avisos de vencimientos desactivados en Android.")
+    private fun installOriginRestrictedNotificationBridge(view: WebView) {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return
+        WebViewCompat.addWebMessageListener(
+            view,
+            "StreamFlowAndroidNative",
+            setOf("https://florenciaamor36-ship-it.github.io"),
+            object : WebViewCompat.WebMessageListener {
+                override fun onPostMessage(webView: WebView, message: WebMessageCompat, sourceOrigin: Uri, isMainFrame: Boolean, replyProxy: JavaScriptReplyProxy) {
+                    if (!isMainFrame || !isAppPage(webView.url.orEmpty()) || !sourceOrigin.host.equals(baseOrigin?.host, ignoreCase = true)) return
+                    runOnUiThread {
+                        when (message.data) {
+                            "enable-expiry-notifications" -> requestExpiryNotifications()
+                            "disable-expiry-notifications" -> {
+                                ExpiryNotificationWorker.disable(this@WebContainerActivity)
+                                dispatchNativeNotificationState(false, "Avisos de vencimientos desactivados en Android.")
+                            }
+                        }
+                    }
+                }
             }
-        }
+        )
     }
+
+    private fun installWebNotificationFacade() {
+        val enabled = ExpiryNotificationWorker.isEnabled(this)
+        val script = "(function(){window.StreamFlowAndroid={isExpiryNotificationsEnabled:function(){return localStorage.getItem('streamflow_android_expiry_notifications')==='true'},requestExpiryNotifications:function(){window.StreamFlowAndroidNative.postMessage('enable-expiry-notifications')},disableExpiryNotifications:function(){window.StreamFlowAndroidNative.postMessage('disable-expiry-notifications')}};localStorage.setItem('streamflow_android_expiry_notifications','$enabled');window.dispatchEvent(new CustomEvent('streamflow:native-ready'));})();"
+        webView?.evaluateJavascript(script, null)
+    }
+
+    private fun isAppPage(url: String): Boolean = try {
+        val configuredPath = URI(BuildConfig.WEB_APP_URL.trim()).path.orEmpty().ifBlank { "/" }
+        val target = URI(url)
+        baseOrigin?.let { isAllowedWebAppUrl(url, it) } == true && target.path.startsWith(configuredPath)
+    } catch (_: Exception) { false }
 
     private fun showLoadError() {
         showMessage("No se pudo cargar la aplicación web. Revisá tu conexión e intentá de nuevo.")
