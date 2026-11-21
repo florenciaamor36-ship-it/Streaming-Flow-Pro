@@ -9,7 +9,7 @@ import com.example.R
 import com.example.data.local.ProfileSaleEntity
 
 object NotificationHelper {
-    private const val CHANNEL_ID = "streaming_expirations_channel"
+    const val CHANNEL_ID = "streaming_expirations_channel"
     private const val CHANNEL_NAME = "Recordatorios de Vencimientos"
 
     fun createNotificationChannel(context: Context) {

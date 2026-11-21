@@ -1,7 +1,18 @@
 package com.example
 
+import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Handler
+import android.os.Looper
+import android.webkit.JavascriptInterface
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import com.example.notifications.ExpiryNotificationWorker
+import com.example.notifications.SessionTokenStore
+import com.example.util.NotificationHelper
+import org.json.JSONTokener
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
@@ -26,6 +37,22 @@ class WebContainerActivity : ComponentActivity() {
     private var webView: WebView? = null
     private var uploadCallback: ValueCallback<Array<Uri>>? = null
     private var baseOrigin: URI? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val captureSessionRunnable = object : Runnable {
+        override fun run() {
+            captureBackgroundSessionToken()
+            mainHandler.postDelayed(this, SESSION_CAPTURE_INTERVAL_MS)
+        }
+    }
+    private val notificationsPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            NotificationHelper.createNotificationChannel(this)
+            ExpiryNotificationWorker.enable(this)
+            dispatchNativeNotificationState(true, "Avisos de vencimientos activados en Android.")
+        } else {
+            dispatchNativeNotificationState(false, "No se concedió permiso para mostrar notificaciones.")
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,10 +83,21 @@ class WebContainerActivity : ComponentActivity() {
             javaScriptCanOpenWindowsAutomatically = false
             setSupportMultipleWindows(false)
         }
+        // Exposes only notification toggles/state; the bearer token is never passed through JavaScript.
+        view.addJavascriptInterface(NotificationBridge(), "StreamFlowAndroid")
         CookieManager.getInstance().setAcceptCookie(true)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) view.settings.safeBrowsingEnabled = true
-        // No addJavascriptInterface: page scripts cannot invoke native methods.
+        // The notification bridge exposes only toggles; it never returns credentials or session data.
         view.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(v: WebView, url: String) {
+                super.onPageFinished(v, url)
+                if (baseOrigin?.let { isAllowedWebAppUrl(url, it) } == true) {
+                    captureBackgroundSessionToken()
+                    mainHandler.removeCallbacks(captureSessionRunnable)
+                    mainHandler.postDelayed(captureSessionRunnable, SESSION_CAPTURE_INTERVAL_MS)
+                }
+            }
+
             override fun shouldOverrideUrlLoading(v: WebView, request: WebResourceRequest): Boolean =
                 routeNavigation(request.url.toString())
 
@@ -110,6 +148,47 @@ class WebContainerActivity : ComponentActivity() {
         return true
     }
 
+    private fun captureBackgroundSessionToken() {
+        val view = webView ?: return
+        if (baseOrigin?.let { isAllowedWebAppUrl(view.url.orEmpty(), it) } != true) return
+        view.evaluateJavascript("(function(){try{return localStorage.getItem('stream_flow_session')}catch(e){return null}})()") { encoded ->
+            val token = try { JSONTokener(encoded ?: "null").nextValue() as? String } catch (_: Exception) { null }
+            if (token.isNullOrBlank()) {
+                SessionTokenStore.clear(this)
+            } else {
+                try {
+                    SessionTokenStore.save(this, token)
+                } catch (_: Exception) { SessionTokenStore.clear(this) }
+            }
+        }
+    }
+
+    private fun requestExpiryNotifications() {
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            notificationsPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            NotificationHelper.createNotificationChannel(this)
+            ExpiryNotificationWorker.enable(this)
+            dispatchNativeNotificationState(true, "Avisos de vencimientos activados en Android.")
+        }
+    }
+
+    private fun dispatchNativeNotificationState(enabled: Boolean, message: String) {
+        val safeMessage = org.json.JSONObject.quote(message)
+        webView?.post { webView?.evaluateJavascript("window.dispatchEvent(new CustomEvent('streamflow:native-notification-state',{detail:{enabled:$enabled,message:$safeMessage}}))", null) }
+    }
+
+    private inner class NotificationBridge {
+        @JavascriptInterface fun isExpiryNotificationsEnabled(): Boolean = ExpiryNotificationWorker.isEnabled(this@WebContainerActivity)
+        @JavascriptInterface fun requestExpiryNotifications() { runOnUiThread { requestExpiryNotifications() } }
+        @JavascriptInterface fun disableExpiryNotifications() {
+            runOnUiThread {
+                ExpiryNotificationWorker.disable(this@WebContainerActivity)
+                dispatchNativeNotificationState(false, "Avisos de vencimientos desactivados en Android.")
+            }
+        }
+    }
+
     private fun showLoadError() {
         showMessage("No se pudo cargar la aplicación web. Revisá tu conexión e intentá de nuevo.")
     }
@@ -136,6 +215,20 @@ class WebContainerActivity : ComponentActivity() {
         setContentView(layout)
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (webView != null) {
+            captureBackgroundSessionToken()
+            mainHandler.removeCallbacks(captureSessionRunnable)
+            mainHandler.postDelayed(captureSessionRunnable, SESSION_CAPTURE_INTERVAL_MS)
+        }
+    }
+
+    override fun onPause() {
+        mainHandler.removeCallbacks(captureSessionRunnable)
+        super.onPause()
+    }
+
     @Deprecated("Required by WebChromeClient file chooser on older Android versions")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
@@ -160,14 +253,15 @@ class WebContainerActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        mainHandler.removeCallbacks(captureSessionRunnable)
         uploadCallback?.onReceiveValue(null)
         uploadCallback = null
-        webView?.apply { stopLoading(); webChromeClient = null; webViewClient = WebViewClient(); destroy() }
+        webView?.apply { removeJavascriptInterface("StreamFlowAndroid"); stopLoading(); webChromeClient = null; webViewClient = WebViewClient(); destroy() }
         webView = null
         super.onDestroy()
     }
 
-    private companion object { const val REQUEST_UPLOAD = 4802 }
+    private companion object { const val REQUEST_UPLOAD = 4802; const val SESSION_CAPTURE_INTERVAL_MS = 15_000L }
 }
 
 /** Restrict in-WebView navigation to the configured HTTPS origin (host and effective port). */
