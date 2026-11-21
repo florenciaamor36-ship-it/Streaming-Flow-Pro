@@ -250,6 +250,16 @@ class WebContainerActivity : ComponentActivity() {
         setContentView(layout)
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val target = intent.dataString ?: return
+        val base = baseOrigin ?: return
+        val configuredPath = URI(BuildConfig.WEB_APP_URL.trim()).path.orEmpty().ifBlank { "/" }
+        val targetPath = try { URI(target).path.orEmpty() } catch (_: Exception) { return }
+        if (isAllowedWebAppUrl(target, base) && targetPath.startsWith(configuredPath)) webView?.loadUrl(target)
+    }
+
     override fun onResume() {
         super.onResume()
         if (webView != null) {
