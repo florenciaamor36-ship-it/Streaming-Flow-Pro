@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main", "master", "release/production-web-staging" ]
   pull_request:
     branches: [ "main", "master" ]
   workflow_dispatch:
@@ -28,10 +28,12 @@ jobs:
           cache-disabled: true
 
       - name: Build Debug APK
-        run: gradle assembleDebug
+        run: gradle assembleDebug testDebugUnitTest --console=plain
+        env:
+          WEB_APP_URL: https://florenciaamor36-ship-it.github.io/stream/
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: StreamFlowPro-APK
+          name: StreamFlowPro-production-target-debug-APK
           path: app/build/outputs/apk/debug/app-debug.apk
