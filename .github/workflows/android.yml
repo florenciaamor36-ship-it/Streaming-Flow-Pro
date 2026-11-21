@@ -9,6 +9,7 @@ on:
 
 jobs:
   build:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
@@ -37,3 +38,56 @@ jobs:
         with:
           name: StreamFlowPro-production-target-debug-APK
           path: app/build/outputs/apk/debug/app-debug.apk
+
+  release:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+          cache-disabled: true
+
+      - name: Prepare private release signing key
+        env:
+          ANDROID_SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_SIGNING_KEYSTORE_BASE64"
+          echo "$ANDROID_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/streamflow-upload-key.p12"
+          test -s "$RUNNER_TEMP/streamflow-upload-key.p12"
+
+      - name: Build signed release APK and Android App Bundle
+        run: gradle assembleRelease bundleRelease testReleaseUnitTest --console=plain
+        env:
+          WEB_APP_URL: https://florenciaamor36-ship-it.github.io/stream/
+          KEYSTORE_PATH: ${{ runner.temp }}/streamflow-upload-key.jks
+          STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
+
+      - name: Verify release APK signature
+        run: |
+          BUILD_TOOLS="$(ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
+
+      - name: Upload signed production candidates
+        uses: actions/upload-artifact@v4
+        with:
+          name: StreamFlowPro-signed-release-APK-and-AAB
+          path: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 30
